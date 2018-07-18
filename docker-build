@@ -1,0 +1,230 @@
+#!/bin/sh
+PROG=docker-build
+
+TMPDIR=/tmp/docker-build.$$.d
+trap "rm -rf ${TMPDIR} ; exit 255" 1 2 13 15
+mkdir ${TMPDIR} || exit 1
+NEWARGS1="${TMPDIR}/nargs1"
+NEWARGS2="${TMPDIR}/nargs2"
+touch ${NEWARGS1}
+touch ${NEWARGS2}
+# Re-write command-line arguments for two invocations of "docker build".
+# The first invocation has no -q|--quiet or -t|--tag arguments. The second
+# has no --pull or --no-cache arguments or original -cache-from arguments; we
+# will insert our own --cache-from and --labal arguments to the second
+# invocation
+(
+  for arg in "$@" ; do
+      echo "$arg"
+  done
+  echo "----END----"
+  docker build --help ) | awk '
+BEGIN {
+    nArgs = 0
+    nShortOpt = 0
+    nLongOpt = 0
+    state="start"
+}
+/^----END----/ {
+    state="starthelp"
+    next
+}
+(state == "start") {
+    # Save original command-line arguments in args[]
+    args[++nArgs] = $0      
+    next
+}
+/^Options:/ {
+    state="inargs"
+    next
+}
+{
+    # parse "docker build --help" to get latest set of legal args
+    line=$0
+    if (line ~ /^ *-[a-z],/) {
+        ind = index(line,"-")
+        shortOpt = substr(line,ind+1,1)
+        shortOpts[++nShortOpt] = shortOpt
+        line = substr(line,ind+3)
+    }
+    if (line ~ /^ *--[^ ]+/) {
+        ind = index(line,"--")
+        optArgJunk = substr(line,ind+2)
+        ind2 = index(optArgJunk," ")
+        longOpt = substr(optArgJunk,1,ind2-1)
+        longOpts[++nLongOpt] = longOpt
+        if (optArgJunk ~ /^[^ ]+ [^ ]/) {
+            arg = 1
+        } else {
+            arg = 0
+        }
+        hasArg["--" longOpt] = arg
+        if (shortOpt != "") {
+            hasArg["-" shortOpt] = arg
+        }
+    }
+    shortOpt = ""
+    longOpt = ""
+}
+END {
+    argc = 1
+    help = "false"
+    quiet = "false"
+    newargc = 0
+    # make note of -q|--quiet, normalize all other arguments and copy to
+    # newargs[]
+    while (argc <= nArgs) {
+        arg = args[argc++]
+        argsep = ""
+        opthasarg = 0
+        if (arg ~ /^-[^-]$/) {
+            opt = arg
+            if (hasArg[opt]) {
+                opthasarg = 1
+                optarg = args[argc++]
+            }
+        } else if (arg ~ /^-[^-]..*/) {
+            opt = substr(arg,1,2)
+            if (hasArg[opt]) {
+                opthasarg = 1
+                optarg = substr(arg,3)
+            } else {
+                args[--argc] = "-" substr(arg,3)
+            }
+        } else if (arg ~ /^--[^-=]+=.*/) {
+            opt = arg
+        } else if (arg ~ /^--/) {
+            opt = arg
+            if (hasArg[opt]) {
+                opthasarg = 1
+                optarg = args[argc++]
+            }
+        } else {
+            argc--
+            break
+        }
+        if (opt ~ /^(--help)|(--help=true)$/) {
+            help = "true"
+        } else if (opt ~ /^(-q)|(--quiet)|(--quiet=true)$/) {
+            quiet = "true"
+        } else {
+            if (opthasarg) {
+                newargs[++newargc] = opt "=" optarg
+            } else {
+                newargs[++newargc] = opt
+            }
+        }
+    }
+    while (argc <= nArgs) {
+        newargs[++newargc] = args[argc++]
+    }
+    # Now build command-line arguments for the two "docker build" passes.
+    # --quiet always goes first; in the first pass we will force it false when
+    # we run, but its original value affects how we redirect the output
+    if (help == "true") {
+        printf("\nUsage:docker-build [OPTIONS] PATH | URL | -\n\n")
+        printf("Run \"docker build\" in two passes to add base info labels ")
+        printf("to the final image.\n")
+        printf("Added labels are \"base.tag\" and \"base.digest\".\n")
+        printf("--help\n") >> nargs1
+        exit 0
+    }
+    printf("--quiet=%s\n",quiet) >> nargs1
+    printf("--quiet=%s\n",quiet) >> nargs2
+    for (i=1; i<=newargc; i++) {
+        arg = newargs[i]
+        if (arg ~ /^(--pull)|(--pull=true)$/) {
+            printf("%s\n",arg) >> nargs1
+        } else if (arg ~ /^(--no-cache)|(--no-cache=true)$/) {
+            printf("%s\n",arg) >> nargs1
+        } else if (arg ~ /^--cache-from/) {
+            printf("%s\n",arg) >> nargs1
+        } else if (arg ~ /^(-t)|(--tag)/) {
+            printf("%s\n",arg) >> nargs2
+        } else {
+            printf("%s\n",arg) >> nargs1
+            printf("%s\n",arg) >> nargs2
+        }
+    }
+}
+' nargs1=${NEWARGS1} nargs2=${NEWARGS2} -
+
+# Run our first invocation of "docker build".
+BUILD_OUTPUT=${TMPDIR}/build.out
+set :
+while read arg ; do
+    set "$@" "${arg}"
+done <${NEWARGS1}
+shift
+if test ":$1" = ":--help" ; then
+    docker build --help
+    rm -rf "${TMPDIR}"
+    exit 0
+fi
+quiet="$1"
+shift
+
+if test ":$quiet" != ":--quiet=false" ; then
+    docker build "$@" >${BUILD_OUTPUT}
+else
+    echo Build 1: docker build "$@"
+    docker build "$@" | tee ${BUILD_OUTPUT}
+fi
+rc=$?
+if test $rc != 0 ; then
+    rm -rf ${TMPDIR}
+    exit $rc
+fi
+
+# Get the base image and newly build image ids
+eval `awk '
+BEGIN { state = "looking" }
+/^Step [0-9]+\/[0-9]+ : [fF][rR][oO][mM]/ {
+    state = "sawfrom"
+    next
+}
+/^ ---> [0-9a-f]*$/ {
+    if (state == "sawfrom") {
+        baseId = $2
+    }
+    state = "looking"
+}
+/^Successfully built / {
+    id = $3
+}
+{
+    next
+}
+END {
+    if ((baseId != "") && (id != "")) {
+        printf("baseId=%s imageId=%s\n",baseId,id);
+    }
+}
+' ${BUILD_OUTPUT}`
+
+if test ":$baseId" != ":" ; then
+    baseTag=`docker inspect --format='{{index .RepoTags 0}}' ${baseId}`
+    baseDigest=`docker inspect --format='{{index .RepoDigests 0}}' ${baseId}`
+fi
+
+# Run our second invocation of "docker build"
+if test ":$baseTag" != ":" ; then
+    set : --cache-from=${imageId}
+fi
+if test ":$baseTag" != ":" ; then
+    set "$@" --label "base.tag=${baseTag}"
+fi
+if test ":$baseDigest" != ":" ; then
+    set "$@" --label "base.digest=${baseDigest}"
+fi
+while read arg ; do
+    set "$@" "${arg}"
+done <${NEWARGS2}
+shift
+rm -rf "${TMPDIR}"
+if test ":$quiet" != ":--quiet=true" ; then
+    echo Build 2: docker build "$@"
+fi
+
+docker build "$@"
+
