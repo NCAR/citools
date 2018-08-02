@@ -28,6 +28,11 @@ resource "github_membership" "membership_for_jdaves-ucar" {
   role: "admin"
 }
 
+resource "github_membership" "membership_for_jtanner" {
+  username: "jtanner"
+  role: "member"
+}
+
 resource "github_membership" "membership_for_wilhelmi" {
   username: "wilhelmi"
   role: "admin"
