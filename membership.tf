@@ -1,3 +1,8 @@
+resource "github_membership" "membership_for_" {
+  username: ""
+  role: "member"
+}
+
 resource "github_membership" "membership_for_datvance" {
   username: "datvance"
   role: "admin"
@@ -26,11 +31,6 @@ resource "github_membership" "membership_for_jasoncunning" {
 resource "github_membership" "membership_for_jdaves-ucar" {
   username: "jdaves-ucar"
   role: "admin"
-}
-
-resource "github_membership" "membership_for_jtanner" {
-  username: "jtanner"
-  role: "member"
 }
 
 resource "github_membership" "membership_for_wilhelmi" {
