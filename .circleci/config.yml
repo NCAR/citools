@@ -28,3 +28,21 @@ jobs:
               git tag --list
 
 
+workflows:
+  version: 2
+  build-push:
+    jobs:
+      - build:
+          context: sweg
+          filters:
+            tags:
+              only: /^\d+\.\d+\.\d+([-+].*)?$/
+
+#      - push:
+#          context: sweg
+#          requires:
+#            - build
+#          filters:
+#            tags:
+#              only: /^\d+\.\d+\.\d+([-+].*)?$/
+
