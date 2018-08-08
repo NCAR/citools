@@ -33,7 +33,6 @@ workflows:
   build-push:
     jobs:
       - build:
-          context: sweg
           filters:
             tags:
               only: /^\d+\.\d+\.\d+([-+].*)?$/
