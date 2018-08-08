@@ -1,0 +1,30 @@
+---
+defaults: &defaults
+  docker:
+    - image: debian:latest
+
+version: 2
+jobs:
+  build:
+    <<: *defaults
+
+    steps:
+      - restore_cache:
+          keys:
+            - source-v1-{{ .Branch }}-{{ .Revision }}
+
+      - checkout
+
+      - save_cache:
+          key: source-v1-{{ .Branch }}-{{ .Revision }}
+          paths:
+            - ".git"
+
+      - run:
+          name: "Show Environment"
+          command: |
+              printenv
+              git rev-list HEAD
+              git tag --list
+
+
