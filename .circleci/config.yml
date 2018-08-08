@@ -1,7 +1,7 @@
 ---
 defaults: &defaults
   docker:
-    - image: debian:latest
+    - image: circleci/buildpack-deps:latest
 
 version: 2
 jobs:
