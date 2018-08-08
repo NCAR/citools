@@ -4,12 +4,16 @@ HELP_TEXT="
 Usage: ${PROG} [OPTIONS] PATH | URL | -
 
 Run \"docker build\" in two passes: the first pass caches the base image and
-all layers defined by the Dockerfile. The second pass uses information about
-the base image extracted from the first image to supplement the final image
-with the following labels:
-  base.tag    - the describing the base image
-to the final constructed image. Added labels are \"base.tag\", \"base.digest\",
-and \"base.id\".
+all layers defined by the Dockerfile. Information about the base image is
+extracted from the built image, and if there is a .git directory, information
+about the release is gathered. The second pass uses this information to
+supplement the final image with the following labels:
+  base.id           - the base image id
+  base.digest       - the base image digest
+  base.tag          - the base image tag
+  git.remote.origin - the url of the git remote origin (e.g. git remote repo)
+  git.tag.version   - the latest version tag
+  git.commit.sha1   - the sha1 of the latest commit
 "
 
 TMPDIR=/tmp/docker-build.$$.d
@@ -135,11 +139,6 @@ END {
     # --quiet always goes first; in the first pass we will force it false when
     # we run, but its original value affects how we redirect the output
     if (help == "true") {
-        printf("\nUsage: docker-build [OPTIONS] PATH | URL | -\n\n")
-        printf("Run \"docker build\" in two passes to add labels describing ")
-        printf("the base image to the\nfinal constructed image. ")
-        printf("Added labels are \"base.tag\", \"base.digest\", and\n")
-        printf("\"base.id\".\n")
         printf("--help\n") >> nargs1
         exit 0
     }
@@ -171,6 +170,7 @@ while read arg ; do
 done <${NEWARGS1}
 shift
 if test ":$1" = ":--help" ; then
+    echo "${HELP_TEXT}"
     docker build --help
     rm -rf "${TMPDIR}"
     exit 0
@@ -226,6 +226,11 @@ else
     baseTag=
     baseDigest=
 fi
+if test -d .git ; then
+    gitRemoteOrigin=`git config --get remote.origin.url`
+    gitTagVersion=`git tag --list | ./versions -c`
+    gitCommitSha1=`git rev-list HEAD | head -1`
+fi
 
 # Run our second invocation of "docker build"
 if test ":$baseTag" != ":" ; then
@@ -239,6 +244,15 @@ if test ":$baseTag" != ":" ; then
 fi
 if test ":$baseDigest" != ":" ; then
     set "$@" --label "base.digest=${baseDigest}"
+fi
+if test ":$gitRemoteOrigin" != ":" ; then
+    set "$@" --label "git.remote.origin=${gitRemoteOrigin}"
+fi
+if test ":$gitVersionTag" != ":" ; then
+    set "$@" --label "git.tag.version=${gitTagVersion}"
+fi
+if test ":$gitCommitSha1" != ":" ; then
+    set "$@" --label "git.commit.sha1=${gitCommitSha1}"
 fi
 while read arg ; do
     set "$@" "${arg}"

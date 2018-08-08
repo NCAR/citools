@@ -17,13 +17,18 @@ displaying the version of the script.
 ### docker-build
 
 The `docker-build` script is a front-end to `docker build`. It supports all
-the same options as `docker build`, but runs `docker build` twice. The first
-time, quiet mode is disabled, the output is analyzed to identify the base
-image, and the base image and new layers are cached. In the second run, which
-uses the cache, labels are added to identify the base image digest and id.
-These labels can be used subsequently to determine whether the base image tag
-has been assigned to a new image, and/or to rebuild the target with exactly
-the same base image. The second `docker build` also includes a label
+the same options as `docker build`, but runs `docker build` in two passes.
+The first pass caches the base image and all layers defined by the Dockerfile.
+Information about the base image is extracted from the built image, and if
+there is a .git directory, information about the release is gathered. The
+second pass uses this information to supplement the final image with the
+following labels:
+  base.id           - the base image id
+  base.digest       - the base image digest
+  base.tag          - the base image tag
+  git.remote.origin - the url of the git remote origin (e.g. git remote repo)
+  git.tag.version   - the latest version tag
+  git.commit.sha1   - the sha1 of the latest commit
 
 ### versions
 
