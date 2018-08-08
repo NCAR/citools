@@ -1,5 +1,16 @@
 #!/bin/sh
 PROG=docker-build
+HELP_TEXT="
+Usage: ${PROG} [OPTIONS] PATH | URL | -
+
+Run \"docker build\" in two passes: the first pass caches the base image and
+all layers defined by the Dockerfile. The second pass uses information about
+the base image extracted from the first image to supplement the final image
+with the following labels:
+  base.tag    - the describing the base image
+to the final constructed image. Added labels are \"base.tag\", \"base.digest\",
+and \"base.id\".
+"
 
 TMPDIR=/tmp/docker-build.$$.d
 trap "rm -rf ${TMPDIR} ; exit 255" 1 2 13 15
@@ -10,9 +21,11 @@ touch ${NEWARGS1}
 touch ${NEWARGS2}
 # Re-write command-line arguments for two invocations of "docker build".
 # The first invocation has no -q|--quiet or -t|--tag arguments. The second
-# has no --pull or --no-cache arguments or original -cache-from arguments; we
-# will insert our own --cache-from and --labal arguments to the second
-# invocation
+# has no --pull or --no-cache arguments or original --cache-from arguments; we
+# will insert our own --cache-from and --label arguments to the second
+# invocation. There is actuall an initial invocation with only the "--help"
+# option, to collect all legal command-line arguments so that the command line
+# can be properly parsed.
 (
   for arg in "$@" ; do
       echo "$arg"
@@ -122,10 +135,11 @@ END {
     # --quiet always goes first; in the first pass we will force it false when
     # we run, but its original value affects how we redirect the output
     if (help == "true") {
-        printf("\nUsage:docker-build [OPTIONS] PATH | URL | -\n\n")
-        printf("Run \"docker build\" in two passes to add base info labels ")
-        printf("to the final image.\n")
-        printf("Added labels are \"base.tag\" and \"base.digest\".\n")
+        printf("\nUsage: docker-build [OPTIONS] PATH | URL | -\n\n")
+        printf("Run \"docker build\" in two passes to add labels describing ")
+        printf("the base image to the\nfinal constructed image. ")
+        printf("Added labels are \"base.tag\", \"base.digest\", and\n")
+        printf("\"base.id\".\n")
         printf("--help\n") >> nargs1
         exit 0
     }
@@ -202,14 +216,23 @@ END {
 }
 ' ${BUILD_OUTPUT}`
 
+if test ":$id" = ":" ; then
+    exit $rc
+fi
 if test ":$baseId" != ":" ; then
     baseTag=`docker inspect --format='{{index .RepoTags 0}}' ${baseId}`
     baseDigest=`docker inspect --format='{{index .RepoDigests 0}}' ${baseId}`
+else
+    baseTag=
+    baseDigest=
 fi
 
 # Run our second invocation of "docker build"
 if test ":$baseTag" != ":" ; then
     set : --cache-from=${imageId}
+fi
+if test ":$baseId" != ":" ; then
+    set "$@" --label "base.id=${baseId}"
 fi
 if test ":$baseTag" != ":" ; then
     set "$@" --label "base.tag=${baseTag}"

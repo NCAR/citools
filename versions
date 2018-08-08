@@ -1,0 +1,367 @@
+#!/bin/sh
+PROG=versions
+DESC="Version strings lister"
+VERSION=0.1.0
+USAGE1="${PROG} -l|--list"
+USAGE2="${PROG} -c|--current [-n|--no-metadata]"
+USAGE3="${PROG} -i|--inc [-f|--field=N|patch|minor|major]"
+USAGE4="${PROG} -h|--help"
+USAGE5="${PROG} --version"
+USAGE="Usage:
+    ${USAGE1}
+    ${USAGE2}
+    ${USAGE3}
+    ${USAGE4}
+    ${USAGE5}"
+
+# This script uses primitive but portable dialects of sh and awk
+PATH="/usr/local/bin:/usr/local/sbin:/bin:/sbin:/usr/bin:/usr/sbin"
+export PATH
+if test ":$1" = ":--help" ; then
+    cat <<EOF
+NAME
+    $PROG - $DESC
+
+SYNOPSIS
+    $USAGE1
+    $USAGE2
+    $USAGE3
+    $USAGE4
+    $USAGE5
+
+DESCRIPTION
+    This script is used to evaluate and manipulate multi-part version strings.
+    It reads version strings from standard input, one per line. A typical
+    use case is expected to involve piping the output of "git tag --list" to
+    the script.
+
+    An input version string may optionally start with "v" or "V", which is
+    ignored.
+
+    Following the optional "v" or "V", the version string is assumed to
+    consist of one or more dot-separated purely numeric components,
+    followed by an optional "pre-release version" string, followed by an
+    optional "metadata" string. Any input strings that do not conform to this
+    format are silently ignored.
+
+    The leading numeric components represent a major version followed by
+    progressively more minor versions.
+
+    The pre-release string, if present, starts with either the first
+    non-numeric dot-separated component, the first non-numeric substring in a
+    component that starts with digits, or the component following the first
+    hyphen, whichever comes first. The pre-release string must consist of
+    dot-separted components that contain only ASCII alphanumerics and hyphens.
+
+    The metadata component, if present, must be separated from the
+    preceeding components by a '+' character. This script does not place any
+    restrictions on the content of the metadata component.
+
+    Note that "semantic version" strings are consistent with this scheme,
+    with the following additional restrictions: there is no leading "v" or "V";
+    there are exactly three leading numeric components; the pre-release string
+    always uses a leading hyphen separator; and the metadata component can
+    consist only of dot-separted components that contain only ASCII
+    alphanumerics and hyphens.
+
+    Output consists of a set of "normalized" version strings written to
+    standard output. These have the following format:
+
+        [v|V]<numvers>[-<prerelease>][+<metadata>]
+
+    where [] indicates optional parts, <numvers> is a set of one or more dot-
+    separated numeric components, and <prerelease> and <metadata> are
+    pre-release and metadata strings as previously described. A leading "v" or
+    "V" will be preserved.
+
+    The following command-line arguments are supported:
+
+    -c|--current
+        Find the current (latest) version string in the input. No more than
+        one version string will be output.
+
+    -f|--field=N|major|minor|patch
+        When used with -i|--inc, indicates which component of the version
+        string should be incremented. The value can be a zero-based integer
+        index of one of the predefined strings "major" (=0), "minor" (=1), or
+        "patch) (=2).
+        
+    -i|--inc
+        Find the latest version string in the input and increment either the
+        last leading numeric component, or the numeric component indicated by
+        the -f|--field argument. Following numeric fields are all set to 0, and
+        the prerelease and metadata fields will be empty. Exactly one version
+        string will be output; if no valid versions strings are read from
+        input, the "current" version is assumed to be "0.0.0".
+
+    -l|--list
+        Validate the input version strings and sort them all from low to high.
+        The last string output will be the latest version string.
+
+    -n|--no-metadata
+        When used with -c|--current, do not include the metadata part of the
+        version string. Note that if the version string is a valid "semantic
+        version" string; this will make the string compatible with docker tags.
+
+    -h|--help
+        Print this help text and exit.
+
+    --verbose
+        Print the version number of the script and exit.
+EOF
+    exit 0
+fi
+
+PROGDIR=`dirname "$0"`
+if ":${AWK}" = ":" ; then
+    for AWK in awk nawk gawk false ; do
+        ${AWK} 'BEGIN{exit 0}' 2>/dev/null && break
+    done
+    if test "${AWK}" = "false" ; then
+        echo "${PROG}: cannot find awk!" >&2
+        exit 1
+    fi
+fi
+
+MODEARGS=
+MODE=
+FIELD=
+META=y
+FAILSAFE_VERSION=
+
+# Process command line
+while test $# -gt 0 ; do
+    arg="$1"
+    shift
+    multi=`expr "X${arg}" : 'X\(-[a-z]\)..*'`
+    if test ":${multi}" != ":" ; then
+        newarg=`expr "X${arg}" : 'X-[a-z]\(..*\)'`
+        arg="${multi}"
+        case ${arg} in
+            -f) set : "${newarg}" "$@" ;;
+            *)  set : "-${newarg}" "$@" ;;
+        esac
+        shift
+    fi
+    case ${arg} in
+    -c|--current)
+        MODEARGS="${MODEARGS} ${arg}"
+        MODE="${MODE}current" ;;
+    -f)
+        FIELD="$1"
+        shift ;;
+    --field=*)
+        FIELD=`expr "X${arg}" : 'X--field=\(.*\)'` ;;
+    -h|--help)
+        $0 --help
+        exit 0 ;;
+    -i|--inc)
+        MODEARGS="${MODEARGS} ${arg}"
+        MODE="${MODE}inc"
+        FAILSAFE_VERSION=0.0.0 ;;
+    -l|--list)
+        MODEARGS="${MODEARGS} ${arg}"
+        MODE="${MODE}list" ;;
+    -n|--no-metadata)
+        META=n ;;
+    --verbose)
+        echo "${PROG} ${VERSION}"
+        exit 0 ;;
+    *)
+        echo "${PROG}: unrecognized argument: ${arg}" >&2
+        echo "${USAGE}" >&2
+        exit 1 ;;
+    esac
+done
+case ${MODE} in
+    '')
+        echo "${PROG} ${VERSION} - ${DESC}"
+        echo "$USAGE"
+        exit 0 ;;
+    list|current|inc)
+        : ;;
+    *)
+        echo "${PROG}: The following are mutually exclusive: ${MODEARGS}" >&2
+        echo "$USAGE" >&2
+        exit 1 ;;
+esac
+case ${FIELD} in
+    '')    : ;;
+    major) FIELD=0 ;;
+    minor) FIELD=1 ;;
+    patch) FIELD=2 ;;
+    [0-9]) : ;;
+    *)
+        echo "${PROG}: -f|--field: Invalid field identiier: $FIELD" >&2
+        exit 1 ;;
+esac
+
+FILTER='^[vV]?[0-9][^:]*$'
+
+rc=0
+(echo ${FAILSAFE_VERSION} ; cat) | egrep "$FILTER" | ${AWK} '
+BEGIN {
+    nbuffered=0
+    split("",field_counts,"");
+    max_fields = 0
+    nlines = 0
+}
+{
+    inrec = $0
+    inrecs[NR] = inrec
+    version = inrec
+    if (version ~ /^[vV][0-9].*/) {
+        version = substr(version,2)
+    }
+
+    idx = index(version,";")
+    if (idx > 0) {
+        version = substr(version,1,idx-1)
+    }
+    idx = index(version,"+")
+    if (idx > 0) {
+        version = substr(version,1,idx-1)
+    }
+
+    len = split(version,inchars,"")
+    inchars[++len] = "."
+    nfields = 0;
+    state = "in_num"
+    field = ""
+    have_field="n"
+    for (i=1; i<=len; i++) {
+        ch = inchars[i]
+        if (state == "start_field") {
+            if (ch ~ /^[-._]$/) {
+                continue
+            } else {
+                if (ch ~ /^[0-9]$/) {
+                    state = "in_num"
+                } else {
+                    state = "in_nonnum"
+                }
+            }
+        }
+        if (state == "in_num") {
+            if (ch ~ /^[0-9]$/) {
+                field = field ch;
+            } else if (ch ~ /^[-._]$/) {
+                have_field = "y"
+                state = "start_field"
+            } else {
+                have_field = "y"
+                state = "in_nonnum"
+            }
+        } else if (state == "in_nonnum") {
+            if (ch == ".") {
+                have_field = "y"
+                state = "start_field"
+            } else if (ch ~ /^[0-9]$/) {
+                have_field = "y"
+                state = "in_num"
+            } else {
+                field = field ch;
+            }
+        }
+        if (have_field == "y") {
+            ++nfields
+            outfields[++nbuffered] = field
+            flen = length(field)
+            mfl = max_fieldlen[nfields] + 0;
+            if (flen > mfl) {
+                max_fieldlen[nfields] = flen;
+            }
+            if (state == "start_field") {
+                field = ""
+            } else {
+                field = ch
+            }
+            have_field = n
+        }
+    }
+    field_counts[NR] = nfields
+    if (nfields > max_fields) {
+        max_fields = nfields
+    }
+    outfields[++nbuffered] = "\n"
+    nlines = NR
+}
+END {
+    lineno_format = ".%0" length(nlines) "d"
+    field = ""
+    bufidx = 1;
+    for (lineidx=1; lineidx <= nlines; lineidx++) {
+        for (fldidx=1; fldidx <= max_fields; fldidx++) {
+            fldlen = max_fieldlen[fldidx]
+            fld = outfields[bufidx]
+            if (fld == "\n") {
+                fld = 0
+                format = "0%0" fldlen "d"
+                fill = 0
+            } else if (fld ~ /^[0-9]+$/) {
+                format = "0%0" fldlen "d"
+                fill = 0
+                bufidx++
+            } else {
+                format = "-%s"
+                fill = fldlen - length(fld)
+                bufidx++
+            }
+            printf format,fld
+            while (--fill >= 0) { printf "0" }
+        }
+        bufidx++
+        printf lineno_format,lineidx
+        printf " %s\n",inrecs[lineidx]
+    }
+    printf "END\n"
+}
+' | sort | while read status data ; do
+    if test ":$status" = ":END" ; then
+        case ${MODE} in
+            current)
+                if test $META = y ; then
+                    echo "${last}"
+                else
+                    nmvers=`echo "${last}" | sed -e 's/^\([vV]*[^+]*\)+.*/\1/'`
+                    echo "${nmvers}"
+                fi ;;
+            inc)
+                prefix=`echo "${last}" | sed -e 's/^\([vV]*\)[0-9].*/\1/'`
+                nv=`echo "${last}" | sed -e 's/^[vV]*\([0-9][.0-9]*\).*/\1/'`
+                numvers=`echo "${nv}" | awk -F "." '
+                {
+                    if (field == "") {
+                        field = NF
+                    } else {
+                        field++
+                    }
+                    saw_targ = "n"
+                    out = ""
+                    for (i=1; i<=NF; i++) {
+                        comp = $i
+                        if (field == i) {
+                            out = out comp+1 "."
+                            saw_targ = "y"
+                        } else if (saw_targ == "n") {
+                            out = out comp "."
+                        } else {
+                            out = out "0."
+                        }
+                    }
+                    l = length(out)
+                    print substr(out,1,l-1)
+                }
+                ' field="${FIELD}"`
+                echo "${prefix}${numvers}" ;;
+        esac
+    else
+        if test ":${MODE}" = ":list" ; then
+            echo "${data}"
+        else
+            last="${data}"
+        fi
+    fi
+done
+
+
