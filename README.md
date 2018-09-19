@@ -23,12 +23,14 @@ Information about the base image is extracted from the built image, and if
 there is a .git directory, information about the release is gathered. The
 second pass uses this information to supplement the final image with the
 following labels:
-  base.id           - the base image id
-  base.digest       - the base image digest
-  base.tag          - the base image tag
-  git.remote.origin - the url of the git remote origin (e.g. git remote repo)
-  git.tag.version   - the latest version tag
-  git.commit.sha1   - the sha1 of the latest commit
+<dl>
+  <dt>base.id</dt><dd>the base image id</dd>
+  <dt>base.digest</dt><dd>the base image digest</dd>
+  <dt>base.tag</dt><dd>the base image tag</dd>
+  <dt>git.remote.origin</dt><dd>the url of the git remote origin (e.g. git remote repo)</dd>
+  <dt>git.tag.version</dt><dd>the latest version tag</dd>
+  <dt>git.commit.sha1</dt><dd>the sha1 of the latest commit</dd>
+</dl>
 
 ### versions
 
