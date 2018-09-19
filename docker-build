@@ -27,7 +27,7 @@ touch ${NEWARGS2}
 # The first invocation has no -q|--quiet or -t|--tag arguments. The second
 # has no --pull or --no-cache arguments or original --cache-from arguments; we
 # will insert our own --cache-from and --label arguments to the second
-# invocation. There is actuall an initial invocation with only the "--help"
+# invocation. There is actually an initial invocation with only the "--help"
 # option, to collect all legal command-line arguments so that the command line
 # can be properly parsed.
 (
@@ -211,21 +211,18 @@ BEGIN { state = "looking" }
 }
 END {
     if ((baseId != "") && (id != "")) {
-        printf("baseId=%s imageId=%s\n",baseId,id);
+        printf("baseId=%s id=%s\n",baseId,id);
     }
-}
-' ${BUILD_OUTPUT}`
+}'`
 
-if test ":$id" = ":" ; then
-    exit $rc
-fi
-if test ":$baseId" != ":" ; then
+if test ":${baseId}" != ":" ; then
     baseTag=`docker inspect --format='{{index .RepoTags 0}}' ${baseId}`
     baseDigest=`docker inspect --format='{{index .RepoDigests 0}}' ${baseId}`
 else
     baseTag=
     baseDigest=
 fi
+
 if test -d .git ; then
     gitRemoteOrigin=`git config --get remote.origin.url`
     gitTagVersion=`git tag --list | ./versions -c`
@@ -234,7 +231,7 @@ fi
 
 # Run our second invocation of "docker build"
 if test ":$baseTag" != ":" ; then
-    set : --cache-from=${imageId}
+    set : --cache-from=${id}
 fi
 if test ":$baseId" != ":" ; then
     set "$@" --label "base.id=${baseId}"
