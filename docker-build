@@ -213,7 +213,7 @@ END {
     if ((baseId != "") && (id != "")) {
         printf("baseId=%s id=%s\n",baseId,id);
     }
-}'`
+}' "${BUILD_OUTPUT}"`
 
 if test ":${baseId}" != ":" ; then
     baseTag=`docker inspect --format='{{index .RepoTags 0}}' ${baseId}`
