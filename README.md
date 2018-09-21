@@ -32,6 +32,14 @@ following labels:
   <dt>git.commit.sha1</dt><dd>the sha1 of the latest commit</dd>
 </dl>
 
+### check-base-image
+
+The `check-base-image` script uses the labels in a docker image built by
+`docker-build` to help determine whether an image's base has been updated
+since it was built. Specifically, it checks whether the image identified
+by the `base.tag` label is still the same as the image identified by the
+`base.digest` label. This can be used to automate image rebuilds.
+
 ### versions
 
 The `versions` script sorts version numbers and optionally selects the most
