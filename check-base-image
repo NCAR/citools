@@ -1,0 +1,134 @@
+#!/bin/sh
+PROG=check-base-image
+DESC="Docker base image update checker"
+VERSION=0.1.0
+USAGE1="${PROG} [-v|--verbose] image"
+USAGE2="${PROG} -h|--help"
+USAGE="Usage:
+    ${USAGE1}
+    ${USAGE2}"
+
+# This script uses primitive but portable dialects of sh and awk
+PATH="/usr/local/bin:/usr/local/sbin:/bin:/sbin:/usr/bin:/usr/sbin"
+export PATH
+if test ":$1" = ":--help" ; then
+    cat <<EOF
+NAME
+    $PROG - $DESC
+
+SYNOPSIS
+    $USAGE1
+    $USAGE2
+
+DESCRIPTION
+    Given the id or name of a specific docker image that was built using
+    the docker-build script, this script checks whether the base image used by
+    the named image has been updated.
+
+    The docker-build script adds labels to the image it builds specifying the
+    "tag name" and the "digest name" of the base image. The "tag name" is what
+    is generally used in a Dockerfile's FROM statements (a name of the form
+    <image>[:<tag>]), while the "digest name" is a name of the form
+    <image>@<digest>. While the same tag name can be assigned to different
+    image instances over time, the digest name will always refer to the same
+    instance.
+
+    This script retrieves the tag name and digest name for the base image,
+    then pulls the base image using the tag name and compares its digest
+    with the base image digest name it got from the named image. If the
+    two digests do not match, the base image is assumed to have been
+    updated.
+
+    The script returns 0 if the base image has not changed, 1 if it has
+    changed, and 2 if an error occurs.
+
+    -v|--verbose
+        Be verbose.
+
+    -h|--help
+        Print this help text and exit.
+EOF
+    exit 0
+fi
+
+VERBOSE=n
+IMAGE=
+
+# Process command line
+while test $# -gt 0 ; do
+    arg="$1"
+    shift
+    case ${arg} in
+    -v|--verbose)
+        VERBOSE=y ;;
+    -h|--help)
+        $0 --help
+        exit 0 ;;
+    -*)
+        echo "${PROG}: unrecognized argument: ${arg}" >&2
+        echo "${USAGE}" >&2
+        exit 1 ;;
+    *)
+        IMAGE="${arg}" ;;
+    esac
+done
+if test ":$IMAGE" = ":" ; then
+    echo "${PROG}: image required" >&2
+    exit 2
+fi
+
+if test $VERBOSE = y ; then
+    echo docker pull $IMAGE
+    docker pull $IMAGE
+else
+    docker pull $IMAGE >/dev/null
+fi
+if test $? != 0 ; then
+    echo "${PROG}: docker pull of $IMAGE failed" >&2
+    exit 2
+fi
+
+baseDigest=`docker inspect \
+              --format "{{ index .Config.Labels \"base.digest\" }}" \
+              "$IMAGE"`
+baseTag=`docker inspect \
+              --format "{{ index .Config.Labels \"base.tag\" }}" \
+              "$IMAGE"`
+
+if test ":baseDigest" = ":" ; then
+    echo "${PROG}: image does not contain base digest label!" >&2
+    exit 2
+fi
+if test ":baseTag" = ":" ; then
+    if test $VERBOSE = y ; then
+        echo "Warning: Image labels include base digest but no base tag" >&2
+    fi
+    baseTag=`echo $baseDigest | sed 's/@.*//'`
+fi
+if test $VERBOSE = y ; then
+    echo docker pull ${baseTag}
+    docker pull ${baseTag}
+else
+    docker pull ${baseTag} >/dev/null
+fi
+if test $? != 0 ; then
+    echo "${PROG}: docker pull of $baseTag failed" >&2
+    exit 2
+fi
+
+currentDigest=`docker inspect --format='{{index .RepoDigests 0}}' "${baseTag}"`
+
+if test ":$currentDigest" = ":" ; then
+    echo "${PROG}: unable to retrieve digest of current base image!" >&2
+    exit 2
+fi
+if test "$baseDigest" != "$currentDigest" ; then
+    if test $VERBOSE = y ; then
+        echo "Image $IMAGE base digest does not match current base digest"
+        echo "  ($baseDigest != $currentDigest)"
+    fi
+    exit 1
+fi
+exit 0
+
+

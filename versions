@@ -106,7 +106,7 @@ DESCRIPTION
     -h|--help
         Print this help text and exit.
 
-    --verbose
+    --version
         Print the version number of the script and exit.
 EOF
     exit 0
@@ -164,7 +164,7 @@ while test $# -gt 0 ; do
         MODE="${MODE}list" ;;
     -n|--no-metadata)
         META=n ;;
-    --verbose)
+    --version)
         echo "${PROG} ${VERSION}"
         exit 0 ;;
     *)
