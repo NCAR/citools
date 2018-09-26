@@ -40,6 +40,11 @@ since it was built. Specifically, it checks whether the image identified
 by the `base.tag` label is still the same as the image identified by the
 `base.digest` label. This can be used to automate image rebuilds.
 
+### get-git-version
+
+The `get-git-version` script attempts to determine the best semantic version
+string to use when building artifacts based on a git repository.
+
 ### versions
 
 The `versions` script sorts version numbers and optionally selects the most
