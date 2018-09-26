@@ -135,7 +135,7 @@ if test ":$currentDigest" = ":" ; then
     echo "${PROG}: unable to retrieve digest of current base image!" >&2
     exit 2
 fi
-set -vx
+
 if test "$baseDigest" != "$currentDigest" ; then
     if test $VERBOSE = y ; then
         echo "Image $IMAGE base digest does not match current base digest"
