@@ -14,8 +14,15 @@ supplement the final image with the following labels:
   git.remote.origin - the url of the git remote origin (e.g. git remote repo)
   git.tag.version   - the latest version tag
   git.commit.sha1   - the sha1 of the latest commit
+  version           - the value of the CIRCLE_TAG environment variable if it is
+                      set; otherwise the value of the VERSION environment
+                      variable if it is set; otherwise the latest 'semantic
+                      version` git tag with the patch number incremented and
+                      '-<datetime>-dev' appended, where <datetime> is the
+                      current UTC date and time.
 "
-
+a="/$0"; a=${a%/*}; a=${a#/}; a=${a:-.};
+SCRIPTDIR=$(cd "$a"; pwd)
 TMPDIR=/tmp/docker-build.$$.d
 trap "rm -rf ${TMPDIR} ; exit 255" 1 2 13 15
 mkdir ${TMPDIR} || exit 1
@@ -225,7 +232,10 @@ fi
 
 if test -d .git ; then
     gitRemoteOrigin=`git config --get remote.origin.url`
-    gitTagVersion=`git tag --list | ./versions -c`
+    if [ -x "${SCRIPTDIR}/versions" ] ; then
+        gitTagVersion=`git tag --list | ${SCRIPTDIR}/versions -c`
+        gitNextPatchVersion=`git tag --list | ${SCRIPTDIR}/versions -i`
+    fi
     gitCommitSha1=`git rev-list HEAD | head -1`
 fi
 
@@ -245,8 +255,14 @@ fi
 if test ":$gitRemoteOrigin" != ":" ; then
     set "$@" --label "git.remote.origin=${gitRemoteOrigin}"
 fi
-if test ":$gitVersionTag" != ":" ; then
+if test ":$gitTagVersion" != ":" ; then
     set "$@" --label "git.tag.version=${gitTagVersion}"
+fi
+if test ":$VERSION" != ":" ; then
+    set "$@" --label "version=${VERSION}"
+elif test ":$gitNextPatchVersion" != ":" ; then
+    utc=`date -u +%Y%m%d%H%M%S`
+    set "$@" --label "version=${gitNextPatchVersion}-${utc}-dev"
 fi
 if test ":$gitCommitSha1" != ":" ; then
     set "$@" --label "git.commit.sha1=${gitCommitSha1}"
