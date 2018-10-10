@@ -11,7 +11,12 @@ jobs:
 
     steps:
       - checkout
-
+      - run:
+          name: "Install CircleCI CLI"
+          command: |
+            set +e
+            bash -c "$(curl -fSl https://raw.githubusercontent.com/CircleCI-Public/circleci-cli/master/install.sh)"
+            circleci update check
       - run:
           name: "Gather Debug Info"
           command: |
