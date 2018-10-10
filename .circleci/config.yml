@@ -34,7 +34,7 @@ jobs:
             git tag --list
             echo git tag --list --points-at \$CIRCLE_SHA1
             git tag --list --points-at $CIRCLE_SHA1
-            IFS="$IFS:"
+            IFS="$IFS:" ; export IFS
             set x $PATH ; shift
             for dir in "$@" ; do
                 echo "$dir:"
