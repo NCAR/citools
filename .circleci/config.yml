@@ -44,7 +44,9 @@ jobs:
           name: "Install CircleCI CLI"
           command: |
             set +e
-            $(curl -fSl https://raw.githubusercontent.com/CircleCI-Public/circleci-cli/master/install.sh) | sed -e 's:DEST=.*:DEST=$HOME/circleci:' >$HOME/install-cli.sh
+            $(curl -fSl https://raw.githubusercontent.com/CircleCI-Public/circleci-cli/master/install.sh) | sed -e 1d -e 's:DEST=.*:DEST=$HOME/circleci:' >$HOME/install-cli.sh
+            echo install-cli.sh:
+            sed -e 's/^/  /' install-cli.sh
             bash $HOME/install-cli.sh
             PATH=$HOME:$PATH export PATH
             circleci update check
