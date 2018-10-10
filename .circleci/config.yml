@@ -1,0 +1,56 @@
+defaults: &defaults
+  docker:
+    - image: circleci/php:7-cli
+
+version: 2.1
+
+jobs:
+
+  build:
+    <<: *defaults
+
+    steps:
+      - checkout
+
+      - run:
+          name: "Gather Debug Info"
+          command: |
+            echo PWD=`pwd`
+            echo HOME="$HOME"
+            echo "ls -la .:"
+            ls -la .
+            echo "ls -la $HOME:"
+            ls -la $HOME
+            echo printenv:
+            printenv | sed -e 's/_PASSWORD=.*/_PASSWORD=----/' \
+                           -e 's/_PASS=.*/_PASS=----/' \
+                           -e 's/_KEY=.*/_KEY=----/' \
+                           -e 's/_TOKEN=.*/_TOKEN=----/'
+            echo git status:
+            git status
+            echo git rev-list HEAD
+            git rev-list HEAD
+            echo git tag --list
+            git tag --list
+            echo git tag --list --points-at \$CIRCLE_SHA1
+            git tag --list --points-at $CIRCLE_SHA1
+            IFS="$IFS:"
+            set x $PATH ; shift
+            for dir in path ; do
+                echo "$dir:"
+                ls -l $dir
+            done
+
+workflows:
+
+  build:
+    jobs:
+      - build:
+          filters:
+            branches:
+              only:
+                - master
+            tags:
+              only: /.*/
+
+
