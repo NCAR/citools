@@ -38,7 +38,7 @@ jobs:
             set x $PATH ; shift
             for dir in "$@" ; do
                 echo "$dir:"
-                ls -l $dir
+                ls -l $dir | sed -e 's/^/  /'
             done
 
 workflows:
