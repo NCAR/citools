@@ -50,9 +50,9 @@ jobs:
             bash $HOME/install-cli.sh
             PATH=$HOME:$PATH export PATH
             circleci namespace create NCAR github NCAR
-#            circleci orb publish \
-#              --token $CIRCLECI_TOKEN_gwilliam-ucar-edu_citools \
-#              circleci-orb.yml NCAR/citools@0.0.1-prealpha
+            # circleci orb publish \
+            #   --token $CIRCLECI_TOKEN_gwilliam-ucar-edu_citools \
+            #   circleci-orb.yml NCAR/citools@0.0.1-prealpha
             true
 
   publish:
