@@ -16,13 +16,10 @@ supplement the final image with the following labels:
   git.commit.sha1   - the sha1 of the latest commit
   version           - the value of the CIRCLE_TAG environment variable if it is
                       set; otherwise the value of the VERSION environment
-                      variable if it is set; otherwise the latest 'semantic
-                      version` git tag with the patch number incremented and
-                      '-<datetime>-dev' appended, where <datetime> is the
-                      current UTC date and time.
+                      variable if it is set; otherwise the output from the
+                      get-git-version script.
 "
-a="/$0"; a=${a%/*}; a=${a#/}; a=${a:-.};
-SCRIPTDIR=$(cd "$a"; pwd)
+a="/$0"; a=${a%/*}; a=${a#/}; a=${a:-.}; SCRIPTDIR=$(cd "$a"; pwd)
 TMPDIR=/tmp/docker-build.$$.d
 trap "rm -rf ${TMPDIR} ; exit 255" 1 2 13 15
 mkdir ${TMPDIR} || exit 1
