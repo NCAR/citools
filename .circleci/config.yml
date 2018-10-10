@@ -41,6 +41,17 @@ jobs:
                 ls -l $dir | sed -e 's/^/  /'
             done
 
+  publish:
+    <<: *defaults
+
+    steps:
+      - checkout
+
+      - run:
+          name: "Publish"
+          command: |
+            echo Publish
+
 workflows:
 
   build:
