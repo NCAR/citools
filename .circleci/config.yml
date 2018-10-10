@@ -14,7 +14,7 @@ jobs:
       - run:
           name: "Gather Debug Info"
           command: |
-            echo "whoami: `whoami`
+            echo "whoami: `whoami`"
             echo PWD=`pwd`
             echo HOME="$HOME"
             echo "ls -la .:"
