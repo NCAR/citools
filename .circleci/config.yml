@@ -49,7 +49,9 @@ jobs:
             sed -e 's/^/  /' $HOME/install-cli.sh
             bash $HOME/install-cli.sh
             PATH=$HOME:$PATH export PATH
-            circleci orb publish --help
+            circleci orb publish \
+              --token $CIRCLECI_TOKEN_gwilliam-ucar-edu_citools \
+              circleci-orb.yml NCAR/citools@0.0.1-prealpha
             true
 
   publish:
