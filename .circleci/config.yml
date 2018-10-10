@@ -49,7 +49,7 @@ jobs:
             sed -e 's/^/  /' $HOME/install-cli.sh
             bash $HOME/install-cli.sh
             PATH=$HOME:$PATH export PATH
-            circleci update check
+            circleci orb publish --help
             true
 
   publish:
