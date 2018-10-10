@@ -36,7 +36,7 @@ jobs:
             git tag --list --points-at $CIRCLE_SHA1
             IFS="$IFS:"
             set x $PATH ; shift
-            for dir in path ; do
+            for dir in "$@" ; do
                 echo "$dir:"
                 ls -l $dir
             done
@@ -50,7 +50,13 @@ workflows:
             branches:
               only:
                 - master
+      - publish:
+          requires:
+            - build
+          filters:
             tags:
-              only: /.*/
+              only: /^\d+\.\d+\.\d+$/
+            branches:
+              ignore: /.*/
 
 
