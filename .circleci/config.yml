@@ -12,15 +12,9 @@ jobs:
     steps:
       - checkout
       - run:
-          name: "Install CircleCI CLI"
-          command: |
-            set +e
-            bash -c "$(curl -fSl https://raw.githubusercontent.com/CircleCI-Public/circleci-cli/master/install.sh)"
-            circleci update check
-
-      - run:
           name: "Gather Debug Info"
           command: |
+            echo "whoami: `whoami`
             echo PWD=`pwd`
             echo HOME="$HOME"
             echo "ls -la .:"
@@ -46,6 +40,12 @@ jobs:
                 echo "$dir:"
                 ls -l $dir | sed -e 's/^/  /'
             done
+      - run:
+          name: "Install CircleCI CLI"
+          command: |
+            set +e
+            bash -c "$(curl -fSl https://raw.githubusercontent.com/CircleCI-Public/circleci-cli/master/install.sh)"
+            circleci update check
 
   publish:
     <<: *defaults
