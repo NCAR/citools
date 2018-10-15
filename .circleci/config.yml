@@ -6,6 +6,15 @@ version: 2.1
 
 jobs:
 
+  say-hello:
+    <<: *defaults
+
+    steps:
+      - run:
+          name: "Say Hi"
+          command: |
+            echo "howdy"
+
   build:
     <<: *defaults
 
@@ -70,6 +79,11 @@ workflows:
   version: 2
   build:
     jobs:
+      - say-hello:
+          filters:
+            branches:
+              only:
+                - master
       - build:
           filters:
             branches:
