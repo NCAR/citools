@@ -8,16 +8,10 @@ all layers defined by the Dockerfile. Information about the base image is
 extracted from the built image, and if there is a .git directory, information
 about the release is gathered. The second pass uses this information to
 supplement the final image with the following labels:
-  base.id           - the base image id
   base.digest       - the base image digest
   base.tag          - the base image tag
   git.remote.origin - the url of the git remote origin (e.g. git remote repo)
-  git.tag.version   - the latest version tag
   git.commit.sha1   - the sha1 of the latest commit
-  version           - the value of the CIRCLE_TAG environment variable if it is
-                      set; otherwise the value of the VERSION environment
-                      variable if it is set; otherwise the output from the
-                      get-git-version script.
 "
 a="/$0"; a=${a%/*}; a=${a#/}; a=${a:-.}; SCRIPTDIR=$(cd "$a"; pwd)
 TMPDIR=/tmp/docker-build.$$.d
@@ -194,54 +188,17 @@ if test $rc != 0 ; then
     exit $rc
 fi
 
-# Get the base image and newly build image ids
-eval `awk '
-BEGIN { state = "looking" }
-/^Step [0-9]+\/[0-9]+ : [fF][rR][oO][mM]/ {
-    state = "sawfrom"
-    next
-}
-/^ ---> [0-9a-f]*$/ {
-    if (state == "sawfrom") {
-        baseId = $2
-    }
-    state = "looking"
-}
-/^Successfully built / {
-    id = $3
-}
-{
-    next
-}
-END {
-    if ((baseId != "") && (id != "")) {
-        printf("baseId=%s id=%s\n",baseId,id);
-    }
-}' "${BUILD_OUTPUT}"`
-
-if test ":${baseId}" != ":" ; then
-    baseTag=`docker inspect --format='{{index .RepoTags 0}}' ${baseId}`
-    baseDigest=`docker inspect --format='{{index .RepoDigests 0}}' ${baseId}`
-else
-    baseTag=
-    baseDigest=
-fi
+infofile=`${SCRIPTDIR}/build-image-info ${TMPDIR} <${BUILD_OUTPUT}`
+. ${TMPDIR}/${infofile}
 
 if test -d .git ; then
     gitRemoteOrigin=`git config --get remote.origin.url`
-    if [ -x "${SCRIPTDIR}/versions" ] ; then
-        gitTagVersion=`git tag --list | ${SCRIPTDIR}/versions -c`
-        gitNextPatchVersion=`git tag --list | ${SCRIPTDIR}/versions -i`
-    fi
     gitCommitSha1=`git rev-list HEAD | head -1`
 fi
 
 # Run our second invocation of "docker build"
 if test ":$baseTag" != ":" ; then
     set : --cache-from=${id}
-fi
-if test ":$baseId" != ":" ; then
-    set "$@" --label "base.id=${baseId}"
 fi
 if test ":$baseTag" != ":" ; then
     set "$@" --label "base.tag=${baseTag}"
@@ -251,15 +208,6 @@ if test ":$baseDigest" != ":" ; then
 fi
 if test ":$gitRemoteOrigin" != ":" ; then
     set "$@" --label "git.remote.origin=${gitRemoteOrigin}"
-fi
-if test ":$gitTagVersion" != ":" ; then
-    set "$@" --label "git.tag.version=${gitTagVersion}"
-fi
-if test ":$VERSION" != ":" ; then
-    set "$@" --label "version=${VERSION}"
-elif test ":$gitNextPatchVersion" != ":" ; then
-    utc=`date -u +%Y%m%d%H%M%S`
-    set "$@" --label "version=${gitNextPatchVersion}-${utc}-dev"
 fi
 if test ":$gitCommitSha1" != ":" ; then
     set "$@" --label "git.commit.sha1=${gitCommitSha1}"

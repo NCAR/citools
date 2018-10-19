@@ -1,29 +1,36 @@
-defaults: &defaults
-  docker:
-    - image: circleci/php:7-cli
-
 version: 2.1
 
 jobs:
-
   say-hello:
-    <<: *defaults
+    docker:
+      - image: circleci/php:7.2-cli
 
     steps:
       - run:
-          name: "Say Hi"
+          name: "Say Hello"
           command: |
-            echo "howdy"
+            echo Hello!
 
-  build:
-    <<: *defaults
+  say-howdy:
+    docker:
+      - image: circleci/php:7.2-cli
+
+    steps:
+      - run:
+          name: "Say Howdy"
+          command: |
+            echo Howdy!
+
+  build-push:
+    docker:
+      - image: circleci/php:7.2-cli
 
     steps:
       - checkout
+
       - run:
           name: "Gather Debug Info"
           command: |
-            echo "whoami: `whoami`"
             echo PWD=`pwd`
             echo HOME="$HOME"
             echo "ls -la .:"
@@ -31,10 +38,10 @@ jobs:
             echo "ls -la $HOME:"
             ls -la $HOME
             echo printenv:
-            printenv | sed -e 's/_PASSWORD=.*/_PASSWORD=----/' \
-                           -e 's/_PASS=.*/_PASS=----/' \
-                           -e 's/_KEY=.*/_KEY=----/' \
-                           -e 's/_TOKEN=.*/_TOKEN=----/'
+            printenv | sed -e 's/PASSWORD=.*/PASSWORD=----/' \
+                           -e 's/PRIVATE_KEY=.*/PRIVATE_KEY=----/' \
+                           -e 's/SECRET_ACCESS_KEY=.*/SECRET_ACCESS_KEY=----/' \
+                           -e 's/GH_TOKEN=.*/GH_TOKEN=----/'
             echo git status:
             git status
             echo git rev-list HEAD
@@ -43,59 +50,30 @@ jobs:
             git tag --list
             echo git tag --list --points-at \$CIRCLE_SHA1
             git tag --list --points-at $CIRCLE_SHA1
-            IFS="$IFS:" ; export IFS
-            set x $PATH ; shift
-            for dir in "$@" ; do
-                echo "$dir:"
-                ls -l $dir | sed -e 's/^/  /'
-            done
-      - run:
-          name: "Install CircleCI CLI"
-          command: |
-            set +e -vx
-            curl -fSl https://raw.githubusercontent.com/CircleCI-Public/circleci-cli/master/install.sh | sed -e 1d -e 's:DEST=.*:DEST=$HOME/circleci:' >$HOME/install-cli.sh
-            echo install-cli.sh:
-            sed -e 's/^/  /' $HOME/install-cli.sh
-            bash $HOME/install-cli.sh
-            PATH=$HOME:$PATH export PATH
-            circleci namespace create NCAR github NCAR
-            # circleci orb publish \
-            #   --token $CIRCLECI_TOKEN_gwilliam-ucar-edu_citools \
-            #   circleci-orb.yml NCAR/citools@0.0.1-prealpha
-            true
-
-  publish:
-    <<: *defaults
-
-    steps:
-      - checkout
 
       - run:
-          name: "Publish"
+          name: "Pull submodules"
           command: |
-            echo Publish
+            git submodule init
+            git submodule update --remote citools
+
+      - setup_remote_docker
+
+      - run:
+          name: "Build image"
+          command: |
+            citools/docker-build -t $CIRCLE_PROJECT_REPONAME:latest .
 
 workflows:
-  version: 2
-  build:
+  build-push:
     jobs:
-      - say-hello:
+      - say-hello
+      - say-howdy
+      - build-push:
           filters:
             branches:
               only:
                 - master
-      - build:
-          filters:
-            branches:
-              only:
-                - master
-      - publish:
-          requires:
-            - build
-          filters:
             tags:
-              only: /^\d+\.\d+\.\d+$/
-            branches:
-              ignore: /.*/
-
+              only: /.*/
 

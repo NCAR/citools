@@ -1,0 +1,152 @@
+#!/bin/sh
+PROG=upload-github-release-asset
+DESC="Upload a file as a github \"release\" asset"
+VERSION=0.1.0
+USAGE1="${PROG} [--owner=<github_user>] [--repo=<repo>]
+                                [--tag=<release_tag>] file"
+USAGE2="${PROG} -h|--help"
+USAGE3="${PROG} --version"
+USAGE="Usage:
+    ${USAGE1}
+    ${USAGE2}
+    ${USAGE3}"
+
+# This script uses primitive but portable dialects of sh and awk
+PATH="/usr/local/bin:/usr/local/sbin:/bin:/sbin:/usr/bin:/usr/sbin"
+export PATH
+UPLOAD_URL=https://uploads.github.com
+
+OWNER="${OWNER:-${CIRCLE_PROJECT_USERNAME}}"
+REPO="${REPO:-${CIRCLE_PROJECT_REPONAME}}"
+TAG="${TAG:-${CIRCLE_TAG}}"
+ASSETFILE=
+
+while [ $# != 0 ] ; do
+    case $1 in
+      -h|--help)
+          cat <<EOF
+NAME
+    $PROG - $DESC
+
+SYNOPSIS
+    $USAGE1
+    $USAGE2
+    $USAGE3
+
+DESCRIPTION
+    Upload a file as an "asset" of a github project "release". The name of
+    the asset is the basename of the file.
+
+    The following command-line options are supported:
+
+    --owner=<github_user>
+        The owner of the github repository. If not given, the OWNER and
+        CIRCLE_PROJECT_USERNAME environment variables are both checked for a
+        value; if no value can be found, the script will abort.
+
+    --repo=<github_repo>
+        The name of the github repository. If not given, the REPO and
+        CIRCLE_PROJECT_REPONAME environment variables are both checked for a
+        value; if no value can be found, the script will abort.
+
+    --tag=<release_tag>
+        The tag name of the github "release". If not given, the TAG and
+        CIRCLE_TAG environment variables are both checked for a value; if no
+        value can be found, the script will abort.
+
+    -h|--help
+        Print a help message and quit.
+
+    --version
+        Print the name and version of the script and quit.
+
+ENVIRONMENT
+    OWNER
+    REPO
+    TAG
+        Primary defaults for the --owner, --repo, and --tag, respectively.
+
+    CIRCLE_PROJECT_USERNAME
+    CIRCLE_PROJECT_REPONAME
+    CIRCLE_TAG
+        Secondary defaults for the --owner, --repo, and --tag, respectively.
+
+    GH_TOKEN
+        A github token for a user having full repository access to the repo.
+
+EOF
+          exit 0 ;;
+      --version)
+          echo "$PROG - v$VERSION"
+          exit 0 ;;
+      --owner=*)
+          OWNER=`expr "$1" : "--owner=\(.*\)"` ;;
+      --repo=*)
+          REPO=`expr "$1" : "--repo=\(.*\)"` ;;
+      --tag=*)
+          TAG=`expr "$1" : "--tag=\(.*\)"` ;;
+      -*)
+          echo "${PROG}: unknown option: $1" >&2
+          exit 1 ;;
+      *)
+          ASSETFILE="$1" ;;
+    esac
+    shift
+done
+
+rc=0
+if [ ":${OWNER}" = ":" ] ; then
+    echo "${PROG}: --owner value is required" >&2
+    rc=1
+fi
+if [ ":${REPO}" = ":" ] ; then
+    echo "${PROG}: --repo value is required" >&2
+    rc=1
+fi
+if [ ":${TAG}" = ":" ] ; then
+    echo "${PROG}: --tag value is required" >&2
+    rc=1
+fi
+if [ ":${ASSETFILE}" = ":" ] ; then
+    echo "${PROG}: filename argument is required" >&2
+    rc=1
+elif [ ! -f "${ASSETFILE}" ] ; then
+    echo "${PROG}: ${ASSETFILE}: no such file" >&2
+    rc=1
+fi
+if [ $rc != 0 ] ; then
+    exit $rc
+fi
+ASSETNAME=`basename "${ASSETFILE}"`
+ASSET=`cat ${ASSETFILE}`
+
+GET_RELEASE_URL="https://api.github.com/repos/$OWNER/$REPO/releases/tags/$TAG"
+POST_ASSET_URL="${UPLOAD_URL}/repos/$OWNER/$REPO/releases"
+
+set : -L \
+     -H "Content-Type: text/plain" \
+     -H "Accept: application/vnd.github.v3+json" \
+     -H "Authorization: token $GH_TOKEN"
+shift
+
+id=`curl -s "$@" "${GET_RELEASE_URL}" | jq '.id'`
+
+if [ "${id}" = "null" ] ; then
+    echo "${PROG}: unable to retrieve release id" >&2
+    echo "URL=${GET_RELEASE_URL}" >&2
+    echo "Output from retry: " >&2
+    curl -i "$@" "${GET_RELEASE_URL}" >&2
+    exit 1
+fi
+
+#TMP=/tmp/$PROG-$$
+#trap "rm -f $TMP ; exit 1" 0 1 2 13 5
+curl -X POST "$@" \
+     --data-raw "${ASSET}" \
+  "${POST_ASSET_URL}/${id}/assets?name=${ASSETNAME}" | jq .
+
+#trap "rm -f $TMPDIR ; exit 1" 1 2 13 5
+
+exit 0
+
+

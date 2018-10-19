@@ -1,0 +1,123 @@
+#!/bin/sh
+PROG=build-image-info
+DESC="Build a file containing CI-relevant metadata about a docker image"
+VERSION=0.1.0
+USAGE1="${PROG} [outdir]"
+USAGE2="${PROG} -h|--help"
+USAGE3="${PROG} --version"
+USAGE="Usage:
+    ${USAGE1}
+    ${USAGE2}
+    ${USAGE3}"
+
+# This script uses primitive but portable dialects of sh and awk
+PATH="/usr/local/bin:/usr/local/sbin:/bin:/sbin:/usr/bin:/usr/sbin"
+export PATH
+OUTDIR=.
+
+case $1 in
+  -h|--help)
+      cat <<EOF
+NAME
+    $PROG - $DESC
+
+SYNOPSIS
+    $USAGE1
+    $USAGE2
+    $USAGE3
+
+DESCRIPTION
+    This script extracts data from "docker build" output and supplements
+    it with "docker inspect" output and "git rev-list" output; it writes
+    the collected metadata to a file called "build-<release>-<timestamp>",
+    where <release> is the first 7 characters of the sha1 of the current git
+    commit, and <timestamp> is the UTC image creation time, in the format
+    "YYYYmmdd.HHMMSSZ" (year, month, day, hour, minute, second, literal "Z"
+    for "zulu time").
+
+    The file contains "<parameter>=<value>" definitions, one per line:
+
+      Parameter       Value
+      ---------       -----
+      releaseSha1     The full sha1 hash of the current git commit
+      imageDigest     The sha256 digest of the image (starting with "sha256:")
+      imageId         The first 12 characters of the imageDigest
+      imageCreated    The ISO8601 creation time of the image
+      baseTag         The full (pullable) "tag name" of the base image
+      baseDigest      The full (pullable) "digest name" of the base image
+
+    The "docker build" input is read from standard input. The output file is
+    written to the current directory, unless a command-line argument is
+    provided; the argument is assumed to be an output directory. The basename
+    of the output file is written to standard output. This name is expected to
+    be used as both the name of a github release asset and a docker image tag.
+
+    The following command-line options are supported:
+
+    -h|--help
+        Print a help message and quit.
+
+    --version
+        Print the name and version of the script and quit.
+
+EOF
+      exit 0 ;;
+  --version)
+      echo "$PROG - v$VERSION"
+      exit 0 ;;
+  *)
+      OUTDIR="$1"
+      if [ ! -d "$OUTDIR" ] ; then
+          mkdir -p "$OUTDIR" || exit 1
+      fi ;;
+esac
+
+eval `awk '
+BEGIN { state = "looking" }
+/^Step [0-9]+\/[0-9]+ : [fF][rR][oO][mM]/ {
+    state = "sawfrom"
+    next
+}
+/^ ---> [0-9a-f]*$/ {
+    if (state == "sawfrom") {
+        baseId = $2
+    }
+    state = "looking"
+}
+/^Successfully built / {
+    id = $3
+}
+{
+    next
+}
+END {
+    if ((baseId != "") && (id != "")) {
+        printf("baseId=%s imageId=%s\n",baseId,id);
+    }
+}'`
+
+releaseSha1=`git rev-list HEAD | head -1`
+set `docker inspect --format='{{.Id}} {{.Created}}' ${imageId}`
+imageDigest="$1"
+imageCreated="$2"
+if test ":${baseId}" != ":" ; then
+    set `docker inspect --format='{{index .RepoTags 0}} {{index .RepoDigests 0}}' ${baseId}`
+    baseTag="$1"
+    baseDigest="$2"
+fi
+nameRelease=`echo "$releaseSha1" | sed -e 's/^\(.......\).*/\1/'`
+nameTstamp=`echo "$imageCreated" |
+   sed -e 's/-//g' -e 's/://g' -e 's/\..*Z/Z/' -e 's/T/./'`
+filename="build-${nameRelease}-${nameTstamp}"
+
+cat >"${OUTDIR}/${filename}" <<EOF
+releaseSha1=$releaseSha1
+imageDigest=$imageDigest
+imageId=$imageId
+imageCreated=$imageCreated
+baseTag=$baseTag
+baseDigest=$baseDigest
+EOF
+echo ${filename}
+exit 0
+
