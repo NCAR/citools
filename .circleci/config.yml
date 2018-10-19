@@ -51,19 +51,6 @@ jobs:
             echo git tag --list --points-at \$CIRCLE_SHA1
             git tag --list --points-at $CIRCLE_SHA1
 
-      - run:
-          name: "Pull submodules"
-          command: |
-            git submodule init
-            git submodule update --remote citools
-
-      - setup_remote_docker
-
-      - run:
-          name: "Build image"
-          command: |
-            citools/docker-build -t $CIRCLE_PROJECT_REPONAME:latest .
-
 workflows:
   build-push:
     jobs:
