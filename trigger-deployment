@@ -2,6 +2,7 @@
 PROG=trigger-deployment
 DESC="Trigger a deployment in CircleCI from a sweg-deployments CircleCI job"
 USAGE="${PROG} [-h|--help]"
+VERSION=0.0.2
 
 case $1 in
   -h|--help)
@@ -40,7 +41,7 @@ case ${CIRCLE_BRANCH} in
       echo "${PROG}: Unsupported branch name: ${CIRCLE_BRANCH}" >&2
       exit 0 ;;
 esac
-
+echo VERSION=$VERSION
 echo TARGET_ENV=$TARGET_ENV
 echo TARGET_REPO=$TARGET_REPO
 
