@@ -1,0 +1,46 @@
+#!/bin/sh
+PROG=trigger-deployment
+DESC="Trigger a deployment in CircleCI from a sweg-deployments CircleCI job"
+USAGE="${PROG} [-h|--help]"
+
+case $1 in
+  -h|--help)
+    cat <<EOF
+NAME
+    $PROG - $DESC
+
+SYNOPSIS
+    $USAGE
+
+DESCRIPTION
+    This script is meant to be run in a CircleCI job that is triggered when an
+    image metadata file is uploaded to a branch in the "sweg-deployments"
+    github repo.
+EOF
+    exit 0 ;;
+esac
+
+case ${CIRCLE_BRANCH} in
+    '')
+      echo "${PROG}: Not running from a CircleCI job" >&2
+      exit 1 ;;
+    master)
+      echo "${PROG}: Nothing to be done on master branch" >&2
+      exit 0 ;;
+    *-test)
+      TARGET_ENV=test
+      TARGET_REPO=`expr "${CIRCLE_BRANCH}" : '\(.*\)-test$'` ;;
+    *-staging)
+      TARGET_ENV=staging
+      TARGET_REPO=`expr "${CIRCLE_BRANCH}" : '\(.*\)-staging$'` ;;
+    *-production)
+      TARGET_ENV=production
+      TARGET_REPO=`expr "${CIRCLE_BRANCH}" : '\(.*\)-production$'` ;;
+    *)
+      echo "${PROG}: Unsupported branch name: ${CIRCLE_BRANCH}" >&2
+      exit 0 ;;
+esac
+
+echo TARGET_ENV=$TARGET_ENV
+echo TARGET_REPO=$TARGET_REPO
+

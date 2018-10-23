@@ -1,0 +1,55 @@
+#!/bin/sh
+
+KNOWN_RELEASEFILES="
+  alpine-release
+  centos-release
+  fedora-release
+  oracle-release
+  redhat-release
+  debian_version
+  SuSE-release
+  arch-release
+"
+KNOWN_PACKAGE_COMMANDS="
+  apk
+  rpm
+  apt
+  dpkg-query
+  pacman
+  nix-env
+  busybox
+"
+
+RELEASE_FILE=
+PACKAGE_MANAGER=
+
+kernel=`uname -mvr`
+echo "kernel: ${kernel}"
+
+cd /etc/
+for releasefile in ${KNOWN_RELEASEFILES} ; do
+    if [ -f ${releasefile} ] ; then
+        read release <${releasefile}
+        echo "distro: ${releasefile}: ${release}"
+        break
+    fi
+done
+cd /
+for cmd in ${KNOWN_PACKAGE_COMMANDS} ; do
+    found=`type ${cmd} 2>/dev/null`
+    if [ ":${found}" = ":" ] ; then
+        continue
+    fi
+    echo "packages"
+    case ${cmd} in
+      apk) apk info -vv | sort ;;
+      rpm) rpm -qa | sort ;;
+      apt) apt list --installed ;;
+      dpkg-query) dpkg-query -W ;;
+      pacman) pacman -Q ;;
+      nix-env) nix-env -q ;;
+      busybox) busybox ;;
+    esac
+done
+
+exit 0

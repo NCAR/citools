@@ -1,9 +1,9 @@
 #!/bin/sh
-PROG=upload-github-release-asset
-DESC="Upload a text file as a github \"release\" asset"
+PROG=list-github-release-assets
+DESC="List the \"assets\" of a github \"release\""
 VERSION=0.1.0
 USAGE1="${PROG} [--owner=<github_user>] [--repo=<repo>]
-                                [--tag=<release_tag>] file"
+                                [--tag=<release_tag>]"
 USAGE2="${PROG} -h|--help"
 USAGE3="${PROG} --version"
 USAGE="Usage:
@@ -19,7 +19,6 @@ UPLOAD_URL=https://uploads.github.com
 REPO_OWNER="${REPO_OWNER:-${CIRCLE_PROJECT_USERNAME}}"
 REPO_NAME="${REPO_NAME:-${CIRCLE_PROJECT_REPONAME}}"
 RELEASE_TAG="${RELEASE_TAG:-${CIRCLE_TAG}}"
-ASSETFILE=
 
 while [ $# != 0 ] ; do
     case $1 in
@@ -34,14 +33,7 @@ SYNOPSIS
     $USAGE3
 
 DESCRIPTION
-    Upload a file as an "asset" of a github project "release". The name of
-    the asset is the basename of the file. The file assumed to be a text file
-    (media type test/plain).
-
-    The script writes the response from github to standard output. Note that
-    the release id can be extracted from this output using the jq following
-    jq command:
-        jq .id <outfile
+    List the "assets" of a github project "release".
 
     The following command-line options are supported:
 
@@ -94,8 +86,6 @@ EOF
       -*)
           echo "${PROG}: unknown option: $1" >&2
           exit 1 ;;
-      *)
-          ASSETFILE="$1" ;;
     esac
     shift
 done
@@ -113,21 +103,11 @@ if [ ":${RELEASE_TAG}" = ":" ] ; then
     echo "${PROG}: --tag value is required" >&2
     rc=1
 fi
-if [ ":${ASSETFILE}" = ":" ] ; then
-    echo "${PROG}: filename argument is required" >&2
-    rc=1
-elif [ ! -f "${ASSETFILE}" ] ; then
-    echo "${PROG}: ${ASSETFILE}: no such file" >&2
-    rc=1
-fi
 if [ $rc != 0 ] ; then
     exit $rc
 fi
-ASSETNAME=`basename "${ASSETFILE}"`
-ASSET=`cat ${ASSETFILE}`
 
-GET_RELEASE_URL="https://api.github.com/repos/$REPO_OWNER/$REPO_NAME/releases/tags/$RELEASE_TAG"
-POST_ASSET_URL="${UPLOAD_URL}/repos/$REPO_OWNER/$REPO_NAME/releases"
+GET_RELEASES_URL="https://api.github.com/repos/$REPO_OWNER/$REPO_NAME/releases/tags/$RELEASE_TAG"
 
 set : -L \
      -H "Content-Type: text/plain" \
@@ -135,8 +115,7 @@ set : -L \
      -H "Authorization: token $GH_TOKEN"
 shift
 
-id=`curl -s "$@" "${GET_RELEASE_URL}" | jq '.id'`
-
+id=`curl -s "$@" "${GET_RELEASES_URL}" | jq '.id'`
 if [ "${id}" = "null" ] ; then
     echo "${PROG}: unable to retrieve release id" >&2
     echo "URL=${GET_RELEASE_URL}" >&2
@@ -144,10 +123,9 @@ if [ "${id}" = "null" ] ; then
     curl -i "$@" "${GET_RELEASE_URL}" >&2
     exit 1
 fi
+GET_ASSETS_URL="https://api.github.com/repos/$REPO_OWNER/$REPO_NAME/releases/$id/assets"
 
-curl -X POST "$@" \
-     --data-raw "${ASSET}" \
-  "${POST_ASSET_URL}/${id}/assets?name=${ASSETNAME}" | jq .
+curl -s "$@" "${GET_ASSETS_URL}" | jq -r '.[].name' | sort
 
 exit 0
 

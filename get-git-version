@@ -24,7 +24,7 @@ DESCRIPTION
     will attempt to create a "development" version by incrementing the "patch"
     number of the latest relevant semantic version tag that can be found, and
     appending a string of the form "<tstamp>-dev", where <tstamp> is a UTC
-    timestamp of the form <YYYYmmddHHMMSS>.
+    timestamp of the form "<YYYYmmdd>.<HHMMSS>Z".
 
     If there are no uncommitted/untracked files and the current revision is
     associated with one of more semantic version tags, then the latest
@@ -110,7 +110,7 @@ if test ":$version" = ":" ; then
         $VECHO "Found/incremented semantic version tag: $version" >&2
     fi
 fi
-tstamp=`date -u +%Y%m%d%H%M%S`
+tstamp=`date -u +%Y%m%d.%H%M%SZ`
 echo "${version}-${tstamp}-dev"
 
 

@@ -49,7 +49,7 @@ DESCRIPTION
         to the indicated file. If the base image has not changed, ensure the
         indicated file does not exist. This also changes the return value of
         the script: if given, the exit value will only be non-zero if an error
-        occurs. This argument makes it easier to use the script is CircleCI
+        occurs. This argument makes it easier to use the script in CircleCI
         jobs.
 
     -v|--verbose
