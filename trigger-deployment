@@ -30,12 +30,15 @@ case ${CIRCLE_BRANCH} in
       exit 0 ;;
     *-test)
       TARGET_ENV=test
+      SEMVER_SUFFIX=-test
       TARGET_REPO=`expr "${CIRCLE_BRANCH}" : '\(.*\)-test$'` ;;
     *-staging)
       TARGET_ENV=staging
+      SEMVER_SUFFIX=-staging
       TARGET_REPO=`expr "${CIRCLE_BRANCH}" : '\(.*\)-staging$'` ;;
     *-production)
       TARGET_ENV=production
+      SEMVER_SUFFIX=
       TARGET_REPO=`expr "${CIRCLE_BRANCH}" : '\(.*\)-production$'` ;;
     *)
       echo "${PROG}: Unsupported branch name: ${CIRCLE_BRANCH}" >&2
@@ -56,5 +59,7 @@ git rev-list HEAD | while read release ; do
 done >/tmp/imagename
 read IMAGENAME </tmp/imagename
 echo IMAGENAME=$IMAGENAME
+RELEASE_TAG=`expr "${IMAGENAME}" : '\([0-9.]*\)-.*'`
+echo RELEASE_TAG=$RELEASE_TAG
 
 
