@@ -46,15 +46,15 @@ echo TARGET_ENV=$TARGET_ENV
 echo TARGET_REPO=$TARGET_REPO
 
 # Find the most recent updated file that looks like an image metadata file
-IMAGENAME=`git rev-list HEAD | while read release ; do
+git rev-list HEAD | while read release ; do
     filename=`git diff-tree --no-commit-id --name-only -r "${release}"`
     imagename=`expr "${filename}" : '\([0-9][0-9]*.[0-9][0-9]*.[0-9][0-9]*-[0-9.]*Z\).*'`
     if [ ":${imagename}" != ":" ] ; then
         echo "${imagename}"
         break
     fi
-done`
-
+done >/tmp/imagename
+read IMAGENAME </tmp/imagename
 echo IMAGENAME=$IMAGENAME
 
 
