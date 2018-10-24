@@ -62,4 +62,12 @@ echo IMAGENAME=$IMAGENAME
 RELEASE_TAG=`expr "${IMAGENAME}" : '\([0-9.]*\)-.*'`
 echo RELEASE_TAG=$RELEASE_TAG
 
+#
+# Add log entry for deployment authorization
+# If release tag does not exist
+#  create it - this will trigger build
+# else
+#  trigger job
+# 
+
 
