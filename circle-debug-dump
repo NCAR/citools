@@ -25,7 +25,7 @@ for command in \
     "ls -la ." \
     "ls -la $HOME" \
     "git status" \
-    "git rev-list" \
+    "git rev-list HEAD" \
     "git tag --list" \
     "git tag --list --points-at $CIRCLE_SHA1"
 do
@@ -38,5 +38,6 @@ printenv | sed -e 's/^/    /' \
                -e 's/PASSWORD=.*/PASSWORD=----/' \
                -e 's/PRIVATE_KEY=.*/PRIVATE_KEY=----/' \
                -e 's/SECRET_ACCESS_KEY=.*/SECRET_ACCESS_KEY=----/' \
-               -e 's/TOKEN=.*/TOKEN=----/'
+               -e 's/TOKEN=.*/TOKEN=----/' \
+               -e 's/KEYS=.*/KEYS=----/' \
 
