@@ -157,7 +157,6 @@ curl -is -L -X PATCH \
      -H "Content-Type: application/json" \
      -H "Accept: application/vnd.github.v3+json" \
      -H "Authorization: token ${GH_TOKEN}" \
-     "${GET_RELEASE_URL}" >${TMPDIR}/out || exit 1
      --data-binary "@${TMPDIR}/newdata" \
   "${PATCH_RELEASE_URL}" >${TMPDIR}/out
 
