@@ -1,0 +1,180 @@
+#!/bin/sh
+PROG=normalize-github-release
+DESC="Validate and \"fix\" a GitHub repo \"release\" for use with CICADA"
+SCRIPT_VERSION=0.0.1
+USAGE1="${PROG}"
+USAGE2="${PROG} -h|--help"
+USAGE3="${PROG} --version"
+USAGE="Usage:
+    ${USAGE1}
+    ${USAGE2}
+    ${USAGE3}"
+
+PATH="/usr/local/bin:/usr/local/sbin:/bin:/sbin:/usr/bin:/usr/sbin"
+export PATH
+
+case $1 in
+    -h|--help)
+      cat <<EOF
+NAME
+    $PROG - $DESC
+
+SYNOPSIS
+    $USAGE1
+    $USAGE2
+    $USAGE3
+
+DESCRIPTION
+    Validate the indicated GitHub "release" object and make sure it conforms
+    to conventions used by the CICADA pipeline. Print the release id to
+    standard output.
+
+    CICADA-friendly release objects have the following attributes:
+     - The release name is a semantic version tag with no pre-release or
+       metadata components; (e.g.: "1.0.1", but not "1.0.1-test", or
+       "1.0.1+meta").
+     - The associated tag is a valid semantic version string.
+     - The release name matches the numeric portion of the tag.
+     - The release is associated with a specific commit SHA (not a branch).
+     - The "prerelease" flag is false if and only if the tag has no pre-release
+       component.
+
+    If \$CIRCLE_TAG is a valid semantic version string, or it is a valid
+    semantic version string preceeded by "v" or "V", the script will validate
+    and, if necessary, modify the release object if necessary to conform to
+    these expectations.
+
+    If the CIRCLE_TAG environment is not set, the script assumes that the job
+    was triggered by a branch commit and silently exits.
+
+    This script is meant to be run in a CircleCI job that was triggered by a
+    tagging event. In particular, it assumes that the CIRCLE_PROJECT_USERNAME
+    and CIRCLE_PROJECT_REPONAME environment variables are set.
+    
+    The GH_TOKEN environment variable must be set to a GitHub Personal Access
+    Token that allows push access to the repo.
+
+    The following command-line options are supported:
+
+    -h|--help
+        Print a help message and quit.
+
+    --version
+        Print the name and version of the script and quit.
+
+EOF
+          exit 0 ;;
+    --version)
+        echo "$PROG - v$SCRIPT_VERSION"
+        exit 0 ;;
+esac
+a="/$0"; a=${a%/*}; a=${a#/}; a=${a:-.}; SCRIPTDIR=$(cd "$a"; pwd)
+
+rc=0
+for envvar in CIRCLE_PROJECT_USERNAME CIRCLE_PROJECT_REPONAME CIRCLE_SHA1 GH_TOKEN ; do
+    eval "val=\"\${$envvar}\""
+    if [ ":$val" = ":" ] ; then
+        echo "${PROG}: $envvar is not set" >&2
+        rc=1
+     fi
+done
+if [ $rc != 0 ] ; then
+    exit $rc
+fi
+
+if [ ":${CIRCLE_TAG}" = ":" ] ; then
+    exit 0
+fi
+
+SEMVER=`expr "${CIRCLE_TAG}" : '[vV]*\([0-9][0-9]*\.[0-9][0-9]*\.[0-9][0-9]*.*\)'`
+SEMVER_BASE=
+if [ ":${SEMVER}" != ":" ] ; then
+    SEMVER_BASE=`expr "${SEMVER}" : '\([0-9][0-9]*\.[0-9][0-9]*\.[0-9][0-9]*\)\([-+].*\)*$'`
+fi
+if [ ":${SEMVER_BASE}" = ":" ] ; then
+    echo "${PROG}: release tag does not look like a semver string" >&2
+    exit 1
+fi
+SEMVER_SUFFIX=`expr "${SEMVER}" : '[0-9][0-9]*\.[0-9][0-9]*\.[0-9][0-9]*\(-.*\)$'`
+if [ ":$SEMVER_SUFFIX" = ":" ] ; then
+    PRERELEASE=false
+else
+    PRERELEASE=true
+fi
+
+#
+# Write intermediate files. This is primitive, but it helps when debugging.
+# When NOT debugging, put the files in a temp dir and set up a trap to clean
+# it up
+#
+TMPDIR="/tmp/$$.d"
+mkdir -p "${TMPDIR}" || exit 1
+trap "rm -rf ${TMPDIR} ; exit 1" 0 1 2 13 15
+
+GET_RELEASE_URL="https://api.github.com/repos/$CIRCLE_PROJECT_USERNAME/$CIRCLE_PROJECT_REPONAME/releases/tags/${CIRCLE_TAG}"
+
+curl -is -L \
+     -H "Accept: application/vnd.github.v3+json" \
+     -H "Authorization: token ${GH_TOKEN}" \
+     "${GET_RELEASE_URL}" >${TMPDIR}/out || exit 1
+
+read status <${TMPDIR}/out
+case $status in
+    *404*)
+        # This must be a non-release tag.
+        echo "${PROG}: No release object for tag ${CIRCLE_TAG}" >&2
+        exit 1 ;;
+    *200*)
+        # If the request succeeded, strip out the HTTP response header and
+        # send the body to a separate temp file
+        sed -n '/^{/,$p' ${TMPDIR}/out >${TMPDIR}/body ;;
+    *)
+        echo "${PROG}: api release query failed" >&2
+        cat ${TMPDIR}/out >&2
+        exit 1 ;;
+esac
+
+jq '{tag_name,target_commitish,name,body,draft,prerelease}' ${TMPDIR}/body >${TMPDIR}/olddata
+id=`jq -r '.id' ${TMPDIR}/body`
+
+sed -e 's/"tag_name": ".*",/"target_commitish": "'${CIRCLE_SHA1}'",/' \
+    -e 's/"target_commitish": ".*",/"target_commitish": "'${CIRCLE_SHA1}'",/' \
+    -e 's/"name": ".*",/"name": "'${SEMVER_BASE}'",/' \
+    -e 's/"prerelease": .*/"prerelease": '${PRERELEASE}'/' \
+  ${TMPDIR}/olddata >${TMPDIR}/newdata
+
+cmp -s ${TMPDIR}/olddata ${TMPDIR}/newdata
+if [ $? = 0 ] ; then
+    # No patch needed
+    echo "${id}"
+    exit 0
+fi
+
+
+PATCH_RELEASE_URL="https://api.github.com/repos/$CIRCLE_PROJECT_USERNAME/$CIRCLE_PROJECT_REPONAME/releases/${id}"
+
+curl -is -L -X PATCH \
+     -H "Content-Type: application/json" \
+     -H "Accept: application/vnd.github.v3+json" \
+     -H "Authorization: token ${GH_TOKEN}" \
+     "${GET_RELEASE_URL}" >${TMPDIR}/out || exit 1
+     --data-binary "@${TMPDIR}/newdata" \
+  "${PATCH_RELEASE_URL}" >${TMPDIR}/out
+
+read status <${TMPDIR}/out
+case $status in
+    *200*)
+        # If the request succeeded, write the release id to stdout
+        echo "${id}" ;;
+    *)
+        echo "${PROG}: patch failed" >&2
+        cat ${TMPDIR}/out >&2
+        exit 1 ;;
+esac
+
+rm -rf ${TMPDIR}
+trap "" 0
+
+exit 0
+
+

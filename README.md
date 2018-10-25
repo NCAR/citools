@@ -90,6 +90,10 @@ all command-line arguments straight through, but also adds the following:
 
 `--label git.release.tag=`*git_release_tag* (if known)
 
+### get-github-release-id
+
+Retrieve the ID of the GitHub release object for a given repo and tag.
+
 ### get-git-version
 
 The `get-git-version` script attempts to determine the best semantic version
@@ -101,6 +105,20 @@ This script lists the names of all "assets" of a given github "release". If the
 `GH_TOKEN` environment variable is set to a personal API Token that has write
 repository access, a draft release can be queried; otherwise, only published
 releases can be queried.
+
+### normalize-gihub-release
+
+Validate the indicated GitHub "release" object and make sure it conforms to
+conventions used by the CICADA pipeline.
+
+CICADA-friendly release objects have the following attributes:
+  * The release name is a semantic version tag with no pre-release or metadata
+    components; (e.g.: "1.0.1", but not "1.0.1-test", or "1.0.1+meta").
+  * The associated tag is a valid semantic version string.
+  * The release name matches the numeric portion of the tag.
+  * The release is associated with a specific commit SHA (not a branch).
+  * The "prerelease" flag is false if and only if the tag has no pre-release
+    component.
 
 ### trigger-deployment
 
