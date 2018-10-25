@@ -54,6 +54,10 @@ since it was built. Specifically, it checks whether the image identified
 by the `base.tag` label is still the same as the image identified by the
 `base.digest` label. This can be used to automate image rebuilds.
 
+### circle-debug-dump
+
+Dump out environment variable, git info, etc. in a CircleCI job
+
 ### docker-build
 
 The `docker-build` script is a front-end to `docker build`. It supports all
