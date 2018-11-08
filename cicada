@@ -57,7 +57,7 @@ case command in
           exit 1
 
       fi
-      cicada-image-tag --get || exit 1 ;;
+      cicada-image-tag --get "${release_tag}" || exit 1 ;;
 
   verify-deployment-approved)
       image_tag="$1"
