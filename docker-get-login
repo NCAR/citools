@@ -1,0 +1,120 @@
+#!/bin/sh
+PROG=docker-get-login
+DESC="Print a command for logging in to a docker registry"
+USAGE1="${PROG} [--show-type] [registry_type|remote_image_name]"
+USAGE2="${PROG} -h|--help"
+USAGE3="${PROG} --version"
+SCRIPT_VERSION=0.0.1
+HELP_TEXT="
+NAME
+    $PROG - $DESC
+
+SYNOPSIS
+    $USAGE1
+    $USAGE2
+    $USAGE3
+
+DESCRIPTION
+    This script prints a \"docker login\" command that can be used to
+    log in to an indicated docker registry.
+
+    If a command-line argument is given, it can be a remote image name
+    or a registry type. Supported registry types are \"ecr\" and
+    \"dockerhub\". If no argument is provided on the command line,
+    environment variables are examined to determine the registry type: if
+    AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY are set, the default registry
+    type is \"ecr\"; otherwise, if DOCKERHUB_USERNAME and DOCKERHUB_PASSWORD
+    are set, the default registry type is \"dockerhub\".
+
+    The following arguments are currently supported:
+
+    --show-type
+        Instead of printing a docker command, print the chosen registry type.
+
+    -h|--help
+        Print this help text and exit.
+
+    --version
+        Print the version number of the script and exit.
+
+ENVIRONMENT
+    DOCKERHUB_DOCKER_LOGIN
+       If present, a pre-calculated docker login command for dockerhub.
+
+    ECR_DOCKER_LOGIN
+       If present, a pre-calculated docker login command for ecr.
+
+    AWS_REGION
+    AWS_ACCESS_KEY_ID
+    AWS_SECRET_ACCESS_KEY
+       Authentication info for AWS ecr.
+
+    DOCKERHUB_USERNAME
+    DOCKERHUB_PASSWORD
+       Authentication info for docker hub.
+
+"
+SCRIPTDIR=`cd \`dirname $0\`; pwd`
+. ${SCRIPTDIR}/citools-basics.rc || exit 1
+
+can_use_ecr=yes
+case ":${AWS_REGION}:${AWS_ACCESS_KEY_ID}:${AWS_SECRET_ACCESS_KEY}:" in
+    *::*) can_use_ecr=no ;;
+esac
+can_use_dockerhub=yes
+case ":${DOCKERHUB_USERNAME}:${DOCKERHUB_PASSWORD}:" in
+    *::*) can_use_dockerhub=no ;;
+esac
+
+if [ ":$1" = ":--show-type" ] ; then
+    MODE=type
+    shift
+else
+    MODE=command
+fi
+
+registry=
+case $1 in
+    '')
+        if [ $can_use_ecr = yes ] ; then
+            registry=ecr
+        elif [ $can_use_dockerhub = yes ] ; then
+            registry=dockerhub
+        fi ;;
+    ecr)
+        registry=ecr ;;
+    *.ecr.*)
+        registry=ecr ;;
+    dockerhub)
+        registry=dockerhub ;;
+    *)
+        registry=dockerhub ;;
+esac
+
+if [ $MODE = type ] ; then
+    echo $registry
+    exit 0
+fi
+
+if [ "${registry}:${can_use_ecr}" = "ecr:yes" ] ; then
+    if [ ":${ECR_DOCKER_LOGIN}" != ":" ] ; then
+        echo "${ECR_DOCKER_LOGIN}"
+    else
+        aws ecr get-login --no-include-email --region ${AWS_REGION} || exit 1
+    fi
+elif [ "${registry}:${can_use_dockerhub}" = "dockerhub:yes" ] ; then
+    if [ ":${DOCKERHUB_DOCKER_LOGIN}" != ":" ] ; then
+        echo "${DOCKERHUB_DOCKER_LOGIN}"
+    else
+        echo docker login -u ${DOCKERHUB_USERNAME} -p ${DOCKERHUB_PASSWORD}
+    fi
+elif [ ":${registry}" = ":" ] ; then
+    echo "${PROG}: unable to determine usable registry" >&2
+    exit 1
+else
+    echo "${PROG}: no credentials for logging in to ${registry}" >&2
+    exit 1
+fi
+exit 0
+
+

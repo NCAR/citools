@@ -78,7 +78,7 @@ case command in
                  --branch=${CIRCLE_PROJECT_REPONAME}-${deploy_env} \
                  --image="${image_tag}" --type=approved`
       if [ ":${logentry}" = ":" ] ; then
-          echo "${PROG} ${command}: not approved" >&2
+          echo "${PROG} ${command}: not approved for promotion" >&2
           exit 1
       fi
       exit 0 ;;
