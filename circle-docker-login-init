@@ -1,0 +1,56 @@
+#!/bin/sh
+PROG=circle-docker-login-init
+DESC="Retrieve and cache a \"docker login\" command"
+USAGE1="${PROG} remote_image_name"
+USAGE2="${PROG} -h|--help"
+USAGE3="${PROG} --version"
+SCRIPT_VERSION=0.0.1
+
+HELP_TEXT="
+NAME
+    $PROG - $DESC
+
+SYNOPSIS
+    $USAGE1
+    $USAGE2
+    $USAGE3
+
+DESCRIPTION
+    Log in to a docker registry and cache the login command.
+"
+SCRIPTDIR=`cd \`dirname $0\`; pwd`
+. ${SCRIPTDIR}/citools-basics.rc || exit 1
+
+HELP_TEXT="
+NAME
+    $PROG - $DESC
+
+SYNOPSIS
+    $USAGE1
+    $USAGE2
+
+DESCRIPTION
+    This script is an adaptor for the CICADA pipeline tools.
+
+"
+SCRIPTDIR=`cd \`dirname $0\`; pwd`
+. ${SCRIPTDIR}/citools-basics.rc || exit 1
+
+if [ ":$1" = ":" ] ; then
+    echo "${PROG}: remote image name argument required" >&2
+    exit 1
+fi
+if [ ":$INIT_RC" = ":" ] ; then
+    echo "${PROG}: INIT_RC variable is not defined" >&2
+    exit 1
+fi
+
+registry=`docker-get-login --show-type "$1"` || exit 1
+if [ ":$registry" = "ecr" ] ; then
+    variable=ECR_DOCKER_LOGIN
+elif [ ":$registry" = "dockerhub" ] ; then
+    variable=DOCKERHUB_DOCKER_LOGIN
+fi
+login=`docker-get-login "$1" 2>/dev/null`
+echo "${variable}=\"${login}\"" >>${INIT_RC}
+exit 0

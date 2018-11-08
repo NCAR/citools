@@ -1,0 +1,47 @@
+#!/bin/sh
+PROG="install-jq"
+DESC="Install jq"
+USAGE1="${PROG} [dest_dir]"
+USAGE2="${PROG} -h|--help"
+SCRIPT_VERSION=0.0.1
+JQ_VERSION='1.5'
+BINDIR=/usr/local/bin
+
+HELP_TEXT="
+NAME
+    $PROG - $DESC
+
+SYNOPSIS
+    $USAGE1
+    $USAGE2
+
+DESCRIPTION
+    Install jq version ${JQ_VERSION}. The installation directory can be
+    provided as a command-line argument (default=$BINDIR).
+"
+SCRIPTDIR=`cd \`dirname $0\`; pwd`
+. ${SCRIPTDIR}/citools-basics.rc || exit 1
+
+if [ ":$1" != ":" ] ; then
+    cd $1 || exit 1
+    BINDIR=`pwd` 
+fi
+
+TMPDIR=/tmp/$$.d
+trap "rm -rf ${TMPDIR} ; exit 1" 0 1 2 13 15
+mkdir -p "${TMPDIR}"
+
+wget --no-check-certificate https://raw.githubusercontent.com/stedolan/jq/master/sig/jq-release.key -O /tmp/jq-release.key
+wget --no-check-certificate https://raw.githubusercontent.com/stedolan/jq/master/sig/v${JQ_VERSION}/jq-linux64.asc -O /tmp/jq-linux64.asc
+wget --no-check-certificate https://github.com/stedolan/jq/releases/download/jq-${JQ_VERSION}/jq-linux64 -O /tmp/jq-linux64
+gpg --homedir ${TMPDIR} --import /tmp/jq-release.key
+gpg --homedir ${TMPDIR} --verify /tmp/jq-linux64.asc /tmp/jq-linux64
+cp /tmp/jq-linux64 ${BINDIR}/jq
+chmod +x ${BINDIR}/jq
+rm -f /tmp/jq-release.key
+rm -f /tmp/jq-linux64.asc
+rm -f /tmp/jq-linux64
+
+rm -rf ${TMPDIR}
+trap "" 0
+exit 0

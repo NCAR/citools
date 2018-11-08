@@ -1,0 +1,23 @@
+:
+#
+# Handle basic common command-line arguments and initialization
+# 
+#
+case $1 in
+  -h|--help)
+    if [ ":${HELP_TEXT}" != ":" ] ; then
+        echo "${HELP_TEXT}"
+        exit 0
+    fi ;;
+  --version)
+    if [ ":${SCRIPT_VERSION}" != ":" ] ; then
+        echo "${PROG} ${SCRIPT_VERSION}"
+        exit 0
+    fi ;;
+esac
+if [ ":${SCRIPTDIR}" = ":" ] ; then
+    SCRIPTDIR=`cd \`dirname $0\`; pwd`
+fi
+PATH="${SCRIPTDIR}:/usr/local/bin:/usr/local/sbin:/bin:/sbin:/usr/bin:/usr/sbin"
+export PATH
+

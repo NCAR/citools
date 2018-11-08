@@ -1,0 +1,101 @@
+#!/bin/sh
+PROG="circle-workspace-init"
+DESC="Initialize the workspace for a CircleCI workflow"
+USAGE1="${PROG} [workspace_root]"
+USAGE2="${PROG} -h|--help"
+USAGE3="${PROG} --version"
+SCRIPT_VERSION=0.0.1
+
+HELP_TEXT="
+NAME
+    $PROG - $DESC
+
+SYNOPSIS
+    $USAGE1
+    $USAGE2
+    $USAGE3
+
+DESCRIPTION
+    This script initializes the \"workspace\" at the start of a CircleCI
+    workflow.
+
+    A CircleCI configuration should define environment variable WORKSPACE
+    to point to the workspace root (e.g. \"\$HOME/workspace\"), and then run
+    the following commands at the start of each workflow to initialize the
+    workspace:
+
+      mkdir -p \${WORKSPACE}/bin \${WORKSPACE}/state
+      git clone --depth 1 git@github.com:NCAR/citools.git \${WORKSPACE}/bin
+      \${WORKSPACE}/bin/circle-workspace-init
+
+    Following these commands, the configuration should run a
+    \"persist_to_workspace\" job step with the root set to the \$WORKSPACE
+    directory and paths \"bin\" and \"state\":
+
+      - persist_to_workspace:
+          root: workspace
+          paths:
+            - bin
+            - state
+
+    All subsequent \"run\" job steps in the workflow should begin with the
+    following command:
+
+      . \${WORKSPACE}/state/init.rc
+
+    The \"\${WORKSPACE}/state/init.rc\" file is written by $PROG.
+    It contains environment variable definitions useful to subsequent
+    jobsteps. The name of the file is stored in its own environment variable,
+    INIT_RC; the definition of INIT_RC is actually included in init.rc.
+
+    In addition to writing the \"init.rc\" file, $PROG
+    installs the \"jq\" utility (and possibly other software) in
+    \${WORKSPACE}/bin, and caches \"docker login\" commands.
+
+    The workspace root directory name must be passed to the script, either
+    on the command line or via the WORKSPACE environment variable.
+
+    The script will write the value of \$INIT_RC to standard output before
+    a successful exit.
+
+    The following options are currently supported:
+
+    -h|--help
+        Print this help text and exit.
+
+    --version
+        Print the version number of the script and exit.
+
+    workspace_root
+        If given, the workspace root directory; this will override any value
+        assigned to the WORKSPACE environment variable.
+
+ENVIRONMENT
+    WORKSPACE
+        The root directory for the CircleCI workspace.
+
+    INIT_RC
+        The \".rc\" file that CircleCI job steps should source to initialize
+        run-time environment variables. If not given, the file name is
+        \$WORKSPACE/state/init.rc.
+"
+SCRIPTDIR=`cd \`dirname $0\`; pwd`
+. ${SCRIPTDIR}/citools-basics.rc || exit 1
+
+WORKSPACE="${1:-${WORKSPACE}}"
+export WORKSPACE
+
+INIT_RC=`${SCRIPTDIR}/circle-env` || exit 1
+. ${INIT_RC} || exit 1
+
+if [ ! -x "${SCRIPTDIR}/${DEPLOYMENT_FRAMEWORK}" ] ; then
+    echo "${PROG}: no script found for DEPLOYMENT_FRAMEWORK=${DEPLOYMENT_FRAMEWORK}" >&2
+    exit 1
+fi
+
+circle-install-tools || exit 1
+
+circle-docker-login-init
+
+echo "${INIT_RC}"
+exit 0

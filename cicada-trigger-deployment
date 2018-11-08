@@ -1,0 +1,154 @@
+#!/bin/sh
+PROG=cicada-trigger-deployment
+DESC="Trigger a deployment in CircleCI from a \"cicada\" CircleCI job"
+USAGE="${PROG} [-h|--help]"
+SCRIPT_VERSION=0.0.2
+
+case $1 in
+  -h|--help)
+    cat <<EOF
+NAME
+    $PROG - $DESC
+
+SYNOPSIS
+    $USAGE
+
+DESCRIPTION
+    This script logs a deployment authorization and triggers the deployment
+    of an image for another project. It is meant to be run in a CircleCI job
+    that is triggered when an image metadata file is uploaded to a branch in
+    the "CICADA" github repo.
+EOF
+    exit 0 ;;
+esac
+a="/$0"; a=${a%/*}; a=${a#/}; a=${a:-.}; SCRIPTDIR=$(cd "$a"; pwd)
+PATH=${SCRIPTDIR}:${PATH}"
+export PATH
+. ${SCRIPTDIR}/deploy_env.rc
+
+cd `git rev-parse --show-toplevel` || exit 1
+
+case ${CIRCLE_BRANCH} in
+    '')
+      echo "${PROG}: Not running from a CircleCI job" >&2
+      exit 1 ;;
+    master)
+      echo "${PROG}: Nothing to be done on master branch" >&2
+      exit 0 ;;
+esac
+
+TARGET_REPO=`expr "${CIRCLE_BRANCH}" : '\(.*\)-[^-][^-]*$'`
+if [ ":${TARGET_REPO}" = ":" ] ; then
+    echo "${PROG}: Unsupported branch name" >&2
+    exit 1
+fi
+TARGET_ENV=`expr "${CIRCLE_BRANCH}" : '.*-\([^-][^-]*\)$'` ;;
+
+
+#
+# Write intermediate files. This is primitive, but it helps when debugging;
+# when debugging, set TMPDIR to '.' and comment out the trap (which cleans
+# up the temp directory).
+#
+TMPDIR=/tmp/$$.d
+trap "rm -rf ${TMPDIR} ; exit 1" 0 1 2 13 15
+mkdir -p "${TMPDIR}" || exit 1
+
+# Find the most recent updated file that looks like an image metadata file
+git rev-list HEAD >${TMPDIR}/revlist |
+    while read release ; do
+       filename=`git diff-tree --no-commit-id --name-only -r "${release}"`
+       imagename=`expr "${filename}" : '\([0-9][0-9]*.[0-9][0-9]*.[0-9][0-9]*-[0-9.]*Z\).*'`
+       if [ ":${imagename}" != ":" ] ; then
+           echo "${imagename}" >${TMPDIR}/imagename
+           git log -1 --pretty=format:"by %ce at %cd" "${release}" >${TMPDIR}/commitinfo
+           break
+       fi
+    done
+read IMAGENAME <${TMPDIR}/imagename
+read COMMIT_INFO <${TMPDIR}/commitinfo
+
+if [ ":${IMAGENAME}" = ":" ] ; then
+    echo "${PROG}: no image info file found" >&2
+    exit 1
+fi
+if [ ! -f "${IMAGENAME}" ] ; then
+    echo "${PROG}: ${IMAGENAME}: no such file" >&2
+    exit 1
+fi
+
+. ${IMAGENAME} || exit 1
+finally=:
+for var in REPO_OWNER REPO_NAME RELEASE_TAG ; do
+    eval "val=\$${var}"
+    if [ ":${val}" = ":" ] ; then
+        echo "${PROG}: variable ${var} not set" >&2
+        finally="exit 1"
+    fi
+done
+eval ${finally}
+REPO="${REPO_OWNER}/${REPO_NAME}"
+export REPO_OWNER REPO_NAME RELEASE_TAG
+
+TARGET_TAG="${RELEASE_TAG}${TARGET_ENV}"
+validate_release_tag  "${TARGET_TAG}" >/dev/null || exit 1
+PRERELEASE=`parse-semver -p "${TARGET_TAG}"`
+if [ "${PRERELEASE}" = ":" ] ; then
+    IS_PRERELEASE=false
+else
+    IS_PRERELEASE=true
+fi
+
+
+if [ "${REPO_NAME}" != "${TARGET_REPO}" ] ; then
+    if [ "${REPO_NAME}" != "${REPO_NAME}_${TARGET_REPO}" ] ; then
+        echo "${PROG}: Image repo name does not match branch name" >&2
+        exit 1
+    fi
+fi
+
+# Check if desired semantic version tag exists. If it does not exist, create
+# it to trigger a CircleCI job via webhook. If it does exist, use the CircleCI
+# API to trigger a job
+echo 'create_tag' >${TMDIR}/action
+git ls-remote --tags "git@github.com:${REPO}.git" |
+    while read release fulltag ; do
+        tag=`expr "${fulltag}" : '.*/\([^/]*$'`
+        if [ ":$tag" = "${SEMVER_TAG}" ] ; then
+            echo 'trigger_job' >${TMDIR}/action
+            break
+        fi
+    done
+read ACTION <${TMPDIR}/action
+
+# Make an entry in the log
+LOGENTRY="${IMAGENAME} ${CIRCLE_BRANCH} authorized $COMMIT_INFO"
+echo LOGENTRY=${LOGENTRY}
+
+${SCRIPTDIR}/cicada-writelog "${CIRCLE_BRANCH}" "${LOGENTRY}" || exit 1
+
+if [ ":${ACTION}" = ":create_tag" ] ; then
+    release_id=`get-github-release-id` || exit 1
+    resp=`github-get "/repos/${REPO}/releases/${release_id}"` || exit 1
+
+    old_data=`echo "${resp}" |
+       jq '{tag_name,target_commitish,name,body,draft,prerelease}'`
+
+    new_data=`echo "$old_data" |
+      sed -e 's/"tag_name": ".*",/"tag_name": "'${TARGET_TAG}'",/' \
+          -e 's/"prerelease": .*/"prerelease": '${IS_PRERELEASE}'/'`
+    cat "${new_data}" |
+        github-patch "/repos/${REPO}/releases/${release_id}" >/dev/null ||
+          exit 1
+elif [ ":${ACTION}" = ":trigger_job" ] ; then
+    TRIGGER_BUILD_PATH="/project/github/${REPO}/build"
+    echo "{\"tag\":\"${TARGET_TAG}\"}" |
+        circle-post "${TRIGGER_BUILD_PATH}" >/dev/null || exit 1
+fi
+
+rm -rf ${TMPDIR}
+trap "" 0
+
+exit 0
+
+

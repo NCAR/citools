@@ -1,0 +1,28 @@
+#!/bin/sh
+PROG="circle-printenv"
+DESC="Dump out environment variable in a CircleCI job"
+USAGE1="${PROG}"
+USAGE2="${PROG} [-h|--help]"
+USAGE3="${PROG} --version"
+SCRIPT_VERSION=0.0.1
+
+HELP_TEXT="
+NAME
+    $PROG - $DESC
+
+SYNOPSIS
+    $USAGE
+
+DESCRIPTION
+    This script dumps all environment variables to standard output, but the
+    values of variables that look sensitive are shown as "----".
+"
+SCRIPTDIR=`cd \`dirname $0\`; pwd`
+. ${SCRIPTDIR}/citools-basics.rc || exit 1
+printenv | sed -e 's/PASSWORD=.*/PASSWORD=----/' \
+               -e 's/PRIVATE_KEY=.*/PRIVATE_KEY=----/' \
+               -e 's/SECRET_ACCESS_KEY=.*/SECRET_ACCESS_KEY=----/' \
+               -e 's/TOKEN=.*/TOKEN=----/' \
+               -e 's/KEYS=.*/KEYS=----/' \
+               -e 's/LOGIN_COMMAND=.*/LOGIN_COMMAND=----/'
+

@@ -1,9 +1,9 @@
 # CiTools
 
 This project contains portable scripts to assist in Continuous Integration.
-Contributions to the project should be written using basic Bourne shell syntax
-and use only universally available secondary tools  (e.g. sed, awk) so that
-the scripts remain as portable as possible.
+Contributions to the project should be written using basic Bourne shell
+syntax and use only universally available secondary tools  (e.g. sed, awk)
+so that the scripts remain as portable as possible.
 
 The current focus of the project is to make automated builds and deployments
 easy and consistent.
@@ -14,38 +14,6 @@ displaying the version of the script.
 
 ## The Scripts
 
-### build-image-info
-
-The `build-image-info` script reads the output from `docker build` from
-standard input and extracts basic information about the built image. It
-supplements this information using the output from `docker inspect` and
-various `git` commands. It writes the collected metadata to a file called
-"*release_tag*-*timestamp*", where *release_tag* is the numeric semantic
-version tag for the release and *timestamp* is the UTC image creation
-time, in the format *YYYYmmdd*.*HHMMSS*Z.
-
-The file contains "*parameter*=*value*" definitions, one per line:
-
-<dl>
-  <dt>IMAGE_NAME</dt><dd>The *release_tag*-*timestamp* name</dd>
-  <dt>RELEASE_TAG</dt><dd>The release tag</dd>
-  <dt>RELEASE_SHA1</dt><dd>The full sha1 hash of the current git commit</dd>
-  <dt>REPO_OWNER</dt><dd>The username of the github repo owner</dd>
-  <dt>REPO_NAME</dt><dd>The name of the github repo</dd>
-  <dt>IMAGE_DIGEST</dt><dd>The sha256 digest of the image (starting with "sha256:")</dd>
-  <dt>IMAGE_ID</dt><dd>The first 12 characters of the imageDigest</dd>
-  <dt>IMAGE_CREATED</dt><dd>The ISO8601 creation time of the image</dd>
-  <dt>BASE_TAG</dt><dd>The full (pullable) "tag name" of the base image</dd>
-  <dt>BASE_DIGEST</dt><dd>The full (pullable) "digest name" of the base image</dd>
-  <dt>BASE_REPO_OWNER</dt><dd>The username of the github repo owner of the base image project, if known (see docker-cibuild)</dd>
-  <dt>BASE_REPO_NAME</dt><dd>The name of the github repo of the base image project, if known (see docker-cibuild)</dd>
-  <dt>BASE_RELEASE_TAG</dt><dd>The release tag of the base image, if known (see docker-cibuild)</dd>
-</dl>
-
-The basename of the file is written to standard output. The file is intended to
-be a "release asset". The name can also be used as a docker tag to uniquely
-identify an unversioned image.
-
 ### check-base-image
 
 The `check-base-image` script uses the labels in a docker image built by
@@ -54,19 +22,51 @@ since it was built. Specifically, it checks whether the image identified
 by the `base.tag` label is still the same as the image identified by the
 `base.digest` label. This can be used to automate image rebuilds.
 
-### circle-debug-dump
+### cicada, cicada-*command*
 
-Dump out environment variable, git info, etc. in a CircleCI job
+Scripts supporting the CICADA deployment framework. Refer to the CICADA
+GitHub repo and the individual scripts for more information.
+
+### circle-docker-login-init
+
+Retrieve and cache a `docker login` command for either dockerhub or AWS ECR.
+This is meant to be used in CircleCI jobs.
+
+### circle-env
+
+Either write environment variable definitions to a given file for various
+CircleCI/citools variables, or verify that the same variables are defined in
+the environment. In write mode, the script is used to initialize a workspace
+"rc" file for use by subsequent job steps. In verification mode, the script
+is used in other scripts to ensure the environment is initialized. The
+environment variables written/verified are: `DEFAULT_ENVIRONMENT`,
+`DEPLOYMENT_FRAMEWORK `, `WORKSPACE`, `INIT_RC`, `LOCAL_BIN`,
+`PRERELEASE_ENVIRONMENTS`, `PRODUCTION_ENVIRONMENT`, `SEMVER`, and `STATEDIR`.
+
+### circle-install-tools
+
+Install miscellaneous tools that might be needed in CircleCI job steps.
+
+### circle-post
+
+Submit a POST request to CircleCI using its API.
+
+### circle-printenv
+
+Dump out all environment variables, but try to hide sensitive values.
+
+### circle-workspace-init
+
+Initializes the "workspace" at the start of a CircleCI workflow. This calls
+`circle-env`, `circle-install-tools`, and `circle-docker-login-init`.
 
 ### docker-build
 
 The `docker-build` script is a front-end to `docker build`. It supports all
 the same options as `docker build`, but runs `docker build` in two passes.
-The first pass caches the base image and all layers defined by the Dockerfile.
-Information about the base image is extracted from the built image, and if
-there is a .git directory, information about the release is gathered. The
-second pass uses this information to supplement the final image with the
-following labels:
+The first pass runs via `docker-cibuild`, which collects metadata about the
+image. The second pass uses this metadata to supplement the final image with
+the following labels:
 <dl>
   <dt>base.id</dt><dd>the base image id</dd>
   <dt>base.digest</dt><dd>the base image digest</dd>
@@ -81,60 +81,57 @@ Note that this script needs to parse the command-line and recognize all valid
 is scans `docker build --help` output to build an argument map. Unfortunately,
 this ~~hokey~~ sophisticated approach cannot guarantee that future docker
 updates will not cause parsing failures. If this is a concern, consider using
-`docker-cibuild` and `build-image-info` instead.
+`docker-cibuild` instead.
 
 ### docker-cibuild
 
-The `docker-cibuild` script is a simple front-end to `docker build`. It passes
-all command-line arguments straight through, but also adds the following:
+The `docker-cibuild` script is a front-end to `docker build` that collects
+and prints out metadata about the build image. It passes all command-line
+arguments straight through to docker-build, except for `--metadata=`*file*,
+which specifies the name of the metadata file. In addition, it adds the
+following labels to the image:
 
 `--label git.remote.origin=`*github_repo_url*
 
-`--label git.commit.sha1`=*git_commit_hash*
+`--label git.revision.sha1`=*git_commit_hash*
 
-`--label git.release.tag=`*git_release_tag* (if known)
+`--label version=`*git_release_tag* (if known)
 
-### get-github-release-id
+Note that this script requires that the `-q` / `--quiet` option **not** be
+passed as an argument.
 
-Retrieve the ID of the GitHub release object for a given repo and tag.
+### docker-tag-push
+
+Easily apply multiple tags to a docker image and push the image to a remote
+registry.
 
 ### get-git-version
 
 The `get-git-version` script attempts to determine the best semantic version
 string to use when building artifacts based on a git repository.
 
-### list-github-release-assets
+### github-get
 
-This script lists the names of all "assets" of a given github "release". If the
-`GH_TOKEN` environment variable is set to a personal API Token that has write
-repository access, a draft release can be queried; otherwise, only published
-releases can be queried.
+Submit a GET request to GitHub using its API.
 
-### normalize-gihub-release
+### github-patch
 
-Validate the indicated GitHub "release" object and make sure it conforms to
-conventions used by the CICADA pipeline.
+Submit a PATCH request to GitHub using its API.
 
-CICADA-friendly release objects have the following attributes:
-  * The release name is a semantic version tag with no pre-release or metadata
-    components; (e.g.: "1.0.1", but not "1.0.1-test", or "1.0.1+meta").
-  * The associated tag is a valid semantic version string.
-  * The release name matches the numeric portion of the tag.
-  * The release is associated with a specific commit SHA (not a branch).
-  * The "prerelease" flag is false if and only if the tag has no pre-release
-    component.
-
-### trigger-deployment
-
-This script is meant to be run in a CircleCI job that is triggered when an
-image metadata file is uploaded to a branch in the "sweg-deployments"
-github repo.
-
-### upload-github-release-asset
+### github-upload-release-asset
 
 This script uploads a file to github as a "release asset" of a given
 repository. It requires that the `GH_TOKEN` environment variable be set to a
 Personal API Token that has full repository access.
+
+### parse-semver
+
+This script parses a given supposed semantic version string and writes
+one or more of the components to standard output.
+
+### sw-manifest
+
+Print a list of installed software on a linux host.
 
 ### versions
 

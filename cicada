@@ -1,0 +1,111 @@
+#!/bin/sh
+PROG="cicada"
+DESC="Adaptor for the CICADA pipeline tools"
+USAGE1="${PROG} init"
+USAGE2="${PROG} register-image <image_metadata_file>"
+USAGE2="${PROG} get-image-tag <release_tag>"
+nUSAGE3="${PROG} verify-deployment-approved <image_tag> <deploy_env>"
+USAGE4="${PROG} log-deployment <image_tag> <deploy_env>"
+USAGE5="${PROG} -h|--help"
+USAGE="Usage:
+    $USAGE1
+    $USAGE2
+    $USAGE3
+    $USAGE4
+    $USAGE5
+"
+SCRIPT_VERSION=0.0.1
+CICADA_REPO=gwilliam-ucar-edu/CICADA
+
+HELP_TEXT="
+NAME
+    $PROG - $DESC
+
+SYNOPSIS
+    $USAGE1
+    $USAGE2
+    $USAGE3
+    $USAGE4
+    $USAGE5
+
+DESCRIPTION
+    This script is an adaptor for the CICADA pipeline tools.
+
+"
+SCRIPTDIR=`cd \`dirname $0\`; pwd`
+. ${SCRIPTDIR}/citools-basics.rc || exit 1
+
+case command in
+  init)
+      cicada-init || exit 1 ;;
+
+  register-image)
+      image_metadata_file="$1"
+      if [ ":${image_metadata_file}" = ":" ] ; then
+          echo "${PROG}: image_metadata_file is required" >&2
+          echo $USAGE >&2
+          exit 1
+
+      fi
+      cicada-image-tag --register "${image_metadata_file}" || exit 1 ;;
+
+  get-image-tag)
+      release_tag="$1"
+      if [ ":${release_tag}" = ":" ] ; then
+          echo "${PROG}: release_tag is required" >&2
+          echo $USAGE >&2
+          exit 1
+
+      fi
+      cicada-image-tag --get || exit 1 ;;
+
+  verify-deployment-approved)
+      image_tag="$1"
+      deploy_env="$2"
+      if [ ":${image_tag}" = ":" ] ; then
+          echo "${PROG}: image_tag is required" >&2
+          echo $USAGE >&2
+          exit 1
+
+      fi
+      if [ ":${deploy_env}" = ":" ] ; then
+          echo "${PROG}: deploy_env is required" >&2
+          echo $USAGE >&2
+          exit 1
+
+      fi
+      logentry=`cicada-log --read \
+                 --branch=${CIRCLE_PROJECT_REPONAME}-${deploy_env} \
+                 --image="${image_tag}" --type=approved`
+      if [ ":${logentry}" = ":" ] ; then
+          echo "${PROG} ${command}: not approved" >&2
+          exit 1
+      fi
+      exit 0 ;;
+
+  log-deployment)
+      image_tag="$1"
+      deploy_env="$2"
+      if [ ":${image_tag}" = ":" ] ; then
+          echo "${PROG}: image_tag is required" >&2
+          echo $USAGE >&2
+          exit 1
+
+      fi
+      if [ ":${deploy_env}" = ":" ] ; then
+          echo "${PROG}: deploy_env is required" >&2
+          echo $USAGE >&2
+          exit 1
+
+      fi
+      cicada-log --write \
+                 --branch=${CIRCLE_PROJECT_REPONAME}-${deploy_env} \
+                 --image="${image_tag}" --type=deployed || exit 1 ;;
+
+  *)
+    echo "${PROG}: unknown command: $1" >&2
+    echo "${USAGE}" >&2
+    exit 1 ;;
+esac
+
+exit 0

@@ -5,8 +5,9 @@ VERSION=0.0.1
 USAGE1="${PROG} [-v|--verbose] [--ignore-untracked]"
 USAGE2="${PROG} -h|--help"
 USAGE3="${PROG} --version"
-if test ":$1" = ":--help" ; then
-    cat <<EOF
+SCRIPT_VERSION=0.0.1
+
+HELP_TEXT="
 NAME
     $PROG - $DESC
 
@@ -21,17 +22,17 @@ DESCRIPTION
 
     If the repo contains any uncommitted/untracked files, or if the current
     revision is not associated with a semantic version tag, then the script
-    will attempt to create a "development" version by incrementing the "patch"
-    number of the latest relevant semantic version tag that can be found, and
-    appending a string of the form "<tstamp>-dev", where <tstamp> is a UTC
-    timestamp of the form "<YYYYmmdd>.<HHMMSS>Z".
+    will attempt to create a \"development\" version by incrementing the
+    \"patch\" number of the latest relevant semantic version tag that can be
+    found, and appending a string of the form \"<tstamp>-dev\", where <tstamp>
+    is a UTC timestamp of the form \"<YYYYmmdd>.<HHMMSS>Z\".
 
     If there are no uncommitted/untracked files and the current revision is
     associated with one of more semantic version tags, then the latest
     semantic version tag is used.
 
     If no relevant semantic version tag can be gleaned from the repo,
-    "0.0.1-<tstamp>-dev" is used.
+    \"0.0.1-<tstamp>-dev\" is used.
 
     The script will write the version tag to standard output. 
 
@@ -42,7 +43,7 @@ DESCRIPTION
 
     --ignore-untracked
         Untracked files are ignored when determining whether the repo is
-        up-to-date. Note that if the git repo contains an untracked ".ci"
+        up-to-date. Note that if the git repo contains an untracked \".ci\"
         directory, it will be ignored even if this argument is not provided.
 
     -h|--help
@@ -50,11 +51,10 @@ DESCRIPTION
 
     --version
         Write the script version number and exit
+"
+SCRIPTDIR=`cd \`dirname $0\`; pwd`
+. ${SCRIPTDIR}/citools-basics.rc || exit 1
 
-EOF
-    exit 0
-fi
-a="/$0"; a=${a%/*}; a=${a#/}; a=${a:-.}; SCRIPTDIR=$(cd "$a"; pwd)
 VECHO=:
 UNO=
 while test $# != 0 ; do

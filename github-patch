@@ -1,0 +1,76 @@
+#!/bin/sh
+PROG="github-patch"
+DESC="Submit a PATCH request to the GitHub API"
+USAGE1="${PROG} path"
+USAGE2="${PROG} -h|--help"
+SCRIPTDIR=$(cd `dirname $0`; pwd)
+. ${SCRIPTDIR}/init-path.rc
+
+GITHUB_URL="${GITHUB_URL:-https://api.github.com}"
+
+case $1 in
+    -h|--help)
+      cat <<EOF
+NAME
+    $PROG - $DESC
+
+SYNOPSIS
+    $USAGE1
+    $USAGE2
+
+DESCRIPTION
+    Submit a PATCH request to the GitHub API. The body of the request is read
+    from standard input.
+
+    If the HTTP response status is 404, a "Not found" message is emitted and 1
+    is returned. If the HTTP response status is another non-200 status, the
+    entire response header and body are written to standard error and 1 is
+    returned. If the HTTP response status is 200, the response header is
+    discarded, the body is written to standard output, and 0 is returned.
+
+    The "path" argument is the URL without the leading "scheme" (e.g.,
+    "/user/repos".
+
+    The following command-line arguments are supported:
+
+    -h|--help
+        Print help text and quit.
+
+ENVIRONMENT
+    GITHUB_URL
+       The base URL that the command-line argument will be appended to.
+       If not given, "https://api.github.com" is used.
+
+    GH_TOKEN
+       A GitHub Personal API Token that will be used to authenticate.
+EOF
+          exit 0 ;;
+    /*)
+        URL_PATH="$@" ;;
+    *)
+        URL_PATH="/$@" ;;
+esac
+URL="${GITHUB_URL}${URL_PATH}"
+
+payload=`cat`
+
+response=`curl -is -L -X PATCH \
+     -H "Content-Type: application/json" \
+     -H "Accept: application/vnd.github.v3+json" \
+     -H "Authorization: token ${GH_TOKEN}" \
+     --data-binary "${payload}" \
+     "${URL}"` || exit 1
+
+statusline=`echo "${response}" | head -1`
+case $statusline in
+    *200*)
+        # If the request succeeded, strip out the HTTP response header and
+        # output the body
+        echo "${response}" | sed -n '/^{/,$p' ;;
+    *)
+        echo "${PROG}: api patch request failed" >&2
+        cat ${response} >&2
+        exit 1 ;;
+esac
+
+exit 0

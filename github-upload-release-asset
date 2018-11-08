@@ -1,30 +1,18 @@
 #!/bin/sh
-PROG=upload-github-release-asset
+PROG=github-upload-release-asset
 DESC="Upload a text file as a github \"release\" asset"
 VERSION=0.1.0
 USAGE1="${PROG} [--owner=<github_user>] [--repo=<repo>]
-                                [--tag=<release_tag>] file"
+                            [--tag=<release_tag>] [--name=assetname] file"
 USAGE2="${PROG} -h|--help"
 USAGE3="${PROG} --version"
 USAGE="Usage:
     ${USAGE1}
     ${USAGE2}
     ${USAGE3}"
+SCRIPT_VERSION=0.0.1
 
-# This script uses primitive but portable dialects of sh and awk
-PATH="/usr/local/bin:/usr/local/sbin:/bin:/sbin:/usr/bin:/usr/sbin"
-export PATH
-UPLOAD_URL=https://uploads.github.com
-
-REPO_OWNER="${REPO_OWNER:-${CIRCLE_PROJECT_USERNAME}}"
-REPO_NAME="${REPO_NAME:-${CIRCLE_PROJECT_REPONAME}}"
-RELEASE_TAG="${RELEASE_TAG:-${CIRCLE_TAG}}"
-ASSETFILE=
-
-while [ $# != 0 ] ; do
-    case $1 in
-      -h|--help)
-          cat <<EOF
+HELP_TEXT="
 NAME
     $PROG - $DESC
 
@@ -34,9 +22,9 @@ SYNOPSIS
     $USAGE3
 
 DESCRIPTION
-    Upload a file as an "asset" of a github project "release". The name of
-    the asset is the basename of the file. The file assumed to be a text file
-    (media type test/plain).
+    Upload a file as an \"asset\" of a github project \"release\". If no asset
+    name is explicit provided, the basename of the upload file is used. The
+    file assumed to be a text file (media type test/plain).
 
     The script writes the response from github to standard output. Note that
     the release id can be extracted from this output using the jq following
@@ -56,9 +44,9 @@ DESCRIPTION
         value; if no value can be found, the script will abort.
 
     --tag=<release_tag>
-        The tag name of the github "release". If not given, the RELEASE_TAG and
-        CIRCLE_TAG environment variables are both checked for a value; if no
-        value can be found, the script will abort.
+        The tag name of the github \"release\". If not given, the RELEASE_TAG
+        and CIRCLE_TAG environment variables are both checked for a value; if
+        no value can be found, the script will abort.
 
     -h|--help
         Print a help message and quit.
@@ -79,18 +67,28 @@ ENVIRONMENT
 
     GH_TOKEN
         A github token for a user having full repository access to the repo.
+"
+SCRIPTDIR=`cd \`dirname $0\`; pwd`
+. ${SCRIPTDIR}/citools-basics.rc || exit 1
 
-EOF
-          exit 0 ;;
-      --version)
-          echo "$PROG - v$VERSION"
-          exit 0 ;;
+UPLOAD_URL=https://uploads.github.com
+
+REPO_OWNER="${REPO_OWNER:-${CIRCLE_PROJECT_USERNAME}}"
+REPO_NAME="${REPO_NAME:-${CIRCLE_PROJECT_REPONAME}}"
+RELEASE_TAG="${RELEASE_TAG:-${CIRCLE_TAG}}"
+ASSETFILE=
+ASSETNAME=
+
+while [ $# != 0 ] ; do
+    case $1 in
       --owner=*)
           REPO_OWNER=`expr "$1" : "--owner=\(.*\)"` ;;
       --repo=*)
           REPO_NAME=`expr "$1" : "--repo=\(.*\)"` ;;
       --tag=*)
           RELEASE_TAG=`expr "$1" : "--tag=\(.*\)"` ;;
+      --name=*)
+          ASSETNAME=`expr "$1" : "--name=\(.*\)"` ;;
       -*)
           echo "${PROG}: unknown option: $1" >&2
           exit 1 ;;
@@ -123,8 +121,9 @@ fi
 if [ $rc != 0 ] ; then
     exit $rc
 fi
-ASSETNAME=`basename "${ASSETFILE}"`
-ASSET=`cat ${ASSETFILE}`
+if [ ":${ASSETNAME}" = ":" ] ; then
+    ASSETNAME=`basename "${ASSETFILE}"`
+fi
 
 GET_RELEASE_URL="https://api.github.com/repos/$REPO_OWNER/$REPO_NAME/releases/tags/$RELEASE_TAG"
 POST_ASSET_URL="${UPLOAD_URL}/repos/$REPO_OWNER/$REPO_NAME/releases"

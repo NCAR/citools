@@ -1,0 +1,231 @@
+#!/bin/sh
+PROG=docker-cibuild
+DESC="Run \"docker build\" with added labels, produce metadata"
+USAGE1="${PROG} [--metadata=file] <BUILD_OPTS>"
+USAGE2="${PROG} -h|--help"
+USAGE3="${PROG} --version"
+USAGE="Usage:
+    ${USAGE1}
+    ${USAGE2}
+    ${USAGE3}"
+SCRIPT_VERSION=0.0.1
+METADATA_VERSION=1.0.0
+
+HELP_TEXT="
+NAME
+    $PROG - $DESC
+
+SYNOPSIS
+    $USAGE1
+    $USAGE2
+    $USAGE3
+
+DESCRIPTION
+    This script passes all arguments with the exception of \"--metadata=*\"
+    to \"docker build\" and adds some useful \"--label\" arguments; it also
+    captures the output, extracts data from it, and supplements it with
+    information from \"docker inspect\" and git; this metadata is written to
+    the file named in the --metadata= argument, or to standard output.
+    If a semantic version number can be determined, it also tags the image
+    with unique tag of the form \"<semver_num>_<YYYYmmdd.HHMMSS>Z\", where
+    <semver_num> is the numeric \"major.minor.patch\" portion of the semantic
+    version string, and <YYYmmdd.HHMMSS> is a UTC timestamp reflecting the
+    creation time of the image.
+
+    Note that this will not work if the -q|--quiet option to \"docker
+    build\" is given.
+
+    The following arguments are automatically passed to \"docker build\" in
+    addition to any provided arguments:
+        --label git.remote.origin=<github_repo_url>
+        --label git.revision.sha1=<git_commit_hash>
+        --label version=<semver>
+
+    The script is meant to be executed as part of an automated build when a
+    \"release tag\" is assigned to a release. In CircleCI, the release tag is
+    available in the CIRCLE_TAG environment variable when a build is
+    triggered via a tag. The script will actually check the RELEASE_TAG
+    environment variable first, then CIRCLE_TAG. If a release tag is
+    provided, it should be a valid semantic version tag.
+
+    The output from \"docker build\" will be written to standard output. If
+    no \"--metadata=file\" argument is given, the metadata will follow.
+    In any case, metadata is presented as \"<parameter>=<value>\"
+    definitions, one per line, in the given order:
+
+      Parameter         Value
+      ---------         -----
+      METADATA_VERSION  The version of the metadata format; current value is
+                        \"${METADATA_VERSION}\".
+      REMOTE_ORIGIN     The github repo URL
+      REPO_OWNER        The username of the github repo owner
+      REPO_NAME         The name of the github repo
+      REVISION_SHA1     The full sha1 hash of the current git revision
+      VERSION           A version string for the current revision; the
+                        environment variable RELEASE_TAG is used if set,
+                        otherwise the environment variable CIRCLE_TAG is used.
+      IMAGE_CREATED     The ISO8601 UTC creation time of the image (nanosecond
+                        resolution)
+      IMAGE_DIGEST      The digest of the image (with leading \"sha256:\")
+      IMAGE_ID          The first 12 characters of the image digest
+      IMAGE_TAG         The tag assigned to the image by the script, if there
+                        is one. The tag is of the form <semver_num>_<timestamp>
+                        (See description above.)
+      BASE_TAG          The full (pullable) \"tag name\" of the base image
+      BASE_DIGEST       The full (pullable) \"digest name\" of the base image
+      BASE_REPO_OWNER   The username of the github repo owner of the base image
+                        project, if the base image was built by this script.
+      BASE_REPO_NAME    The name of the github repo of the base image project,
+                        if the base image was built by this script.
+      BASE_VERSION      The release tag of the base image, if the base image
+                        was built by this script.
+
+    The following command-line arguments are supported:
+
+    -h|--help
+        Print a help message and quit.
+
+    --version
+        Print the name and version of the script and quit.
+
+"
+
+SCRIPTDIR=`cd \`dirname $0\`; pwd`
+. ${SCRIPTDIR}/citools-basics.rc || exit 1
+
+# extract --metadata-file=file argument
+METADATA_FILE=
+set x "$@" ====== ; shift
+while [ ":$1" != ":======" ] ; do
+      case $1 in
+          --metadata=*)
+              METADATA_FILE=`expr "$1" : '--metadata=\(.*\)$'`
+              shift ;;
+          *)
+              arg1="$1"
+              shift
+              set x "$@" "${arg1}" ; shift
+      esac
+done
+shift
+
+version="${RELEASE_TAG:-${CIRCLE_TAG}}"
+if [ ":${version}" != ":" ] ; then
+    set : --label "version=${version}" "$@"
+    shift
+    SEMVER_NUM=`parse-semver -n "${version}" 2>/dev/null`
+else
+    SEMVER_NUM=
+fi
+
+toplevel=`git rev-parse --show-toplevel 2>/dev/null`
+
+if [ ":$toplevel" != ":" ] ; then
+    gitRemoteOrigin=`git config --get remote.origin.url`
+    gitRevisionSha1=`git rev-list HEAD | head -1`
+    set : --label "git.remote.origin=${gitRemoteOrigin}" \
+          --label "git.revision.sha1=${gitRevisionSha1}" "$@"
+    shift
+fi
+
+SCRATCHDIR="/tmp/citools$$.d"
+mkdir -p "${SCRATCHDIR}" || exit 1
+trap "rm -rf ${SCRATCHDIR} ; exit 1" 0 1 2 13 15
+
+docker build "$@" | tee ${SCRATCHDIR}/docker-build.out
+
+# Retrieve baseId and imageId from docker build output
+eval `awk '
+BEGIN { state = "looking" }
+/^Step [0-9]+\/[0-9]+ : [fF][rR][oO][mM]/ {
+    state = "sawfrom"
+    next
+}
+/^ ---> [0-9a-f]*$/ {
+    if (state == "sawfrom") {
+        baseId = $2
+    }
+    state = "looking"
+}
+/^Successfully built / {
+    id = $3
+}
+{
+    next
+}
+END {
+    if ((baseId != "") && (id != "")) {
+        printf("baseId=%s imageId=%s\n",baseId,id);
+    }
+}' ${SCRATCHDIR}/docker-build.out`
+
+rm -rf "${SCRATCHDIR}"
+trap "" 0
+
+imageInfo=`docker inspect --format='{{.Id}} {{.Created}}' ${imageId}`
+if [ ":${imageInfo}" = ":" ] ; then
+    echo "${PROG}: unable to retrieve image data for $imageId" >&2
+    exit 1
+fi
+set : ${imageInfo}
+imageDigest="$2"
+imageCreated="$3"
+
+baseTag= baseDigest= baseRemoteOrigin= baseVersion=
+if [ ":${baseId}" != ":" ] ; then
+    baseInfo=`docker inspect --format='{{index .RepoTags 0}} {{index .RepoDigests 0}} {{index .Config.Labels "git.remote.origin"}} {{index .Config.Labels "version"}}' ${baseId}`
+    if [ ":${baseInfo}" != ":" ] ; then
+        set : ${baseInfo}
+        baseTag="$2"
+        baseDigest="$3"
+        baseRemoteOrigin="$4"
+        baseVersion="$5"
+    fi
+fi
+
+# Split out owners and repo names from remote git URLs.
+IFS_SAVE="${IFS}"
+IFS="${IFS}/:"
+eval set x ${gitRemoteOrigin} ; shift
+while [ $# -gt 2 ] ; do shift ; done
+repoOwner="$1"
+repoName=`basename "$2" .git`
+eval set x ${baseRemoteOrigin} ; shift
+while [ $# -gt 2 ] ; do shift ; done
+baseRepoOwner="$1"
+baseRepoName=`basename "$2" .git`
+IFS="${IFS_SAVE}"
+
+# Create unique tag if possible and tag the image
+imageTag=
+if [ ":${SEMVER_NUM}" != ":" ] ; then
+    tagTstamp=`echo "$imageCreated" | sed -e 's/-//g' -e 's/://g' -e 's/\..*Z/Z/' -e 's/T/./'`
+    imageTag="${SEMVER_NUM}_${tagTstamp}"
+
+    docker tag ${imageId} ${repoName}:${imageTag}
+fi
+
+if [ ":${METADATA_FILE}" != ":" ] ; then
+    exec >"${METADATA_FILE}"
+fi
+
+cat <<EOF
+METADATA_VERSION=$METADATA_VERSION
+REMOTE_ORIGIN=$gitRemoteOrigin
+REPO_OWNER=$repoOwner
+REPO_NAME=$repoName
+REVISION_SHA1=$gitRevisionSha1
+VERSION=$version
+IMAGE_CREATED=$imageCreated
+IMAGE_DIGEST=$imageDigest
+IMAGE_ID=$imageId
+IMAGE_TAG=$imageTag
+BASE_TAG=$baseTag
+BASE_DIGEST=$baseDigest
+BASE_REPO_OWNER=$baseRepoOwner
+BASE_REPO_NAME=$baseRepoName
+BASE_VERSION=$baseVersion
+EOF
+
+exit 0
+

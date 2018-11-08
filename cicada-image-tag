@@ -1,0 +1,144 @@
+#!/bin/sh
+PROG=cicada-image-tag
+DESC="Register or look up an image tag"
+USAGE1="${PROG} --register <image_metadata_file>"
+USAGE2="${PROG} --get <semver>"
+USAGE3="${PROG} -h|--help"
+USAGE4="${PROG} --version"
+SCRIPT_VERSION=0.0.1
+
+HELP_TEXT="
+NAME
+    $PROG - $DESC
+
+SYNOPSIS
+    $USAGE1
+    $USAGE2
+    $USAGE3
+    $USAGE4
+
+DESCRIPTION
+    This script manages image metadata and image tags for CICADA clients.
+
+    If executed with the \"--register\" option, the script uploads the
+    given image metadata file as an \"asset\" to the appropriate release
+    object in the  target project's GitHub repo. The name of the asset is
+    \"<image_tag><semver_meta>\", where <image_tag> is the image's IMAGE_TAG
+    metadata attribute (<semver_num>_<timestamp>) and <semver_meta> is the
+    metadata portion of the semantic verstion string stored in \$CIRCLE_TAG.
+
+    If executed with the \"--get\" argument, the script extracts the numeric
+    and metadata components from the \$CIRCLE_TAG semantic version string and
+    searches the GitHub release object for an asset with a name starting and
+    ending, respectively, with these components. If a matching asset is found,
+    the image tag is extracted from the name and printed to standard output.
+
+    The script requires that \"circle-init\" has run previously.
+
+    The following command-line options are supported:
+
+    --register image_metadata_file
+        \"Register\" the given image metadata file with CICADA.
+
+    --get release_tag
+        Find the image associated with the given release_tag and print its
+        image tag to standard output. If no image is found, nothing is printed.
+
+    -h|--help
+        Print a help message and quit.
+
+    --version
+        Print the name and version of the script and quit.
+
+ENVIRONMENT
+    CIRCLE_PROJECT_USERNAME
+    CIRCLE_PROJECT_REPONAME
+        The username and reponame of the target project. Set by CircleCI.
+
+    STATEDIR
+        The location of the state directory in the workspace.
+
+    GH_TOKEN
+        A GitHub Personal Access Token that allows read access to the target
+        repo.
+"
+
+SCRIPTDIR=`cd \`dirname $0\`; pwd`
+. ${SCRIPTDIR}/citools-basics.rc || exit 1
+
+MODE=
+case $1 in
+    --register)
+        IMAGE_METADATA="$2"
+        MODE=register ;;
+    --get)
+        SEMVER="$2"
+        MODE=get ;;
+    '')
+        echo "${PROG}: --register or --get is required" >&2
+        exit 1 ;;
+    *)
+        echo "${PROG}: illegal argument: $1" >&2
+        exit 1 ;;
+esac
+
+# Verify all needed environment variables are set
+circle-env || exit 1
+
+IMAGE_TAG_FILE="${STATEDIR}/image_tag"
+
+if [ ":${GH_TOKEN}" = ":" ] ; then
+    echo "${PROG}: GH_TOKEN must be set" >&2
+    exit 1
+fi
+
+read RELEASE_ID <${STATEDIR}/release_id
+if [ ":${RELEASE_ID}" = ":" ] ; then
+    echo "${PROG}: Cannot determine GitHub release id" >&2
+    exit 1
+fi
+
+if [ $MODE = register ] ; then
+    . "${image_metadata_file}" || exit 1
+    if [ ":${IMAGE_TAG}" = ":" ] ; then
+        echo "${PROG}: Cannot determine image tag" >&2
+        exit 1
+    fi
+    ASSETNAME="${IMAGE_TAG}${SEMVER_META}"
+    github-upload-release-asset --name="${ASSETNAME}" \
+                                "${image_metadata_file}"  || exit 1
+    echo "${IMAGE_TAG}" >"${IMAGE_TAG_FILE}" ;;
+
+else if [ $MODE = get ] ; then
+    if [ -s "${IMAGE_TAG_FILE}" ] ; then
+        cat "${IMAGE_TAG_FILE}"
+        exit 0
+    fi
+    # Get a list of all assets
+    resp=`github-get "/repos/${REPO}/releases/${release_id}/assets"`
+    if [ $? != 0 ] ; then
+        echo ${resp} >&2
+        exit 1
+    fi
+
+    # Extract asset names from reponse and locate matching name
+    SEMVER_NUM=`parse-semver -n ${SEMVER}`
+    SEMVER_META=`parse-semver -m ${SEMVER}`
+    MMP_REGEX=`echo "${SEMVER_NUM}" | sed -e 's/\./[.]/g'`
+    TSTAMP_REGEX='[0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9]\.[0-9][0-9][0-9][0-9][0-9][0-9]Z'
+    META_REGEX=`echo "${SEMVER_META}" | sed -e 's/\./[.]/g' -e 's/\+/[+]/g'`
+    TAG_CAPTURING_REGEX="\(${MMP_REGEX}-${TSTAMP_REGEX}\)${META_REGEX}\$"
+    echo "${resp}" | jq -r '.[].name' | sort -r |
+        while read name ; do
+            image_tag=`expr "${name}" : "${TAG_CAPTURING_REGEX}"`
+            if [ ":${image_tag}" != ":"  ] ; then
+                echo "${image_tag}" >"${IMAGE_TAG_FILE}"
+                echo "${image_tag}"
+                break
+            fi
+        done
+fi
+
+exit 0
+
+

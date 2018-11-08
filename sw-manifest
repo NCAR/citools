@@ -1,5 +1,63 @@
 #!/bin/sh
+PROG="sw-manifest"
+DESC="Print a list of installed software on a linux host"
+USAGE1="${PROG}"
+USAGE2="${PROG} <docker_image>"
+USAGE3="${PROG} -h|--help"
+USAGE4="${PROG} --version"
+SCRIPT_VERSION=0.0.1
+SCRIPTDIR=`cd \`dirname $0\`; pwd`
 
+case $1 in
+    -h|--help)
+        cat <<EOF
+NAME
+    $PROG - $DESC
+
+SYNOPSIS
+    $USAGE1
+    $USAGE2
+    $USAGE3
+    $USAGE4
+
+DESCRIPTION
+    Print a list of installed software on a linux host, including the output
+    of "uname -mvr", the distro version, and all packages reported by the
+    resident package manager.
+
+    The following arguments are currently supported:
+
+    -h|--help
+        Print this help text and exit.
+
+    --version
+        Print the version number of the script and exit.
+
+    <docker-image>
+        If a non-option argument is given, it is assumed to be the name of
+        a local docker image; a temporary container is created and the
+        script is run inside the container.
+EOF
+        exit 0 ;;
+
+    --version)
+        echo "${PROG} - ${SCRIPT_VERSION}"
+        exit 0 ;;
+
+    -*)
+        echo "${PROG}: unknown option: $1" >&2
+        exit 1 ;;
+
+    '')
+        : ;;
+    *)
+        docker run --rm -u root --entrypoint=/bin/sh \
+            --volume="${SCRIPTDIR}/${PROG}:/tmp/${PROG}" \
+            "$1" "/tmp/${PROG}"
+        exit $? ;;
+esac
+
+# 
 KNOWN_RELEASEFILES="
   alpine-release
   centos-release
@@ -36,19 +94,31 @@ for releasefile in ${KNOWN_RELEASEFILES} ; do
 done
 cd /
 for cmd in ${KNOWN_PACKAGE_COMMANDS} ; do
-    found=`type ${cmd} 2>/dev/null`
-    if [ ":${found}" = ":" ] ; then
-        continue
-    fi
-    echo "packages"
-    case ${cmd} in
-      apk) apk info -vv | sort ;;
-      rpm) rpm -qa | sort ;;
-      apt) apt list --installed ;;
-      dpkg-query) dpkg-query -W ;;
-      pacman) pacman -Q ;;
-      nix-env) nix-env -q ;;
-      busybox) busybox ;;
+    found=`type ${cmd} 2>&1`
+    case $found in
+        *not\ found*)
+            : ;;
+        *)
+            echo "packages (${cmd}):"
+            case ${cmd} in
+              apk) 
+                  apk info -vv 2>&1 | sed -e 's/ - .*//' | sort | \
+                    grep -v 'WARNING: ' ;;
+              rpm)
+                  rpm -qa | sort ;;
+              apt)
+                  apt list --installed ;;
+              dpkg-query)
+                  dpkg-query -W ;;
+              pacman)
+                  pacman -Q ;;
+              nix-env)
+                  nix-env -q ;;
+              busybox)
+                  v=`busybox | head -1`
+                  c=`busybox --list | tr '\n' ','`
+                  echo "$v: $c" ;;
+            esac ;;
     esac
 done
 

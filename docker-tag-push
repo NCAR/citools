@@ -1,0 +1,122 @@
+#!/bin/sh
+PROG=docker-tag-push
+DESC="Tag and push a docker image"
+USAGE1="${PROG} local_image remote_image [tags...]"
+USAGE2="${PROG} --semver=semver local_image remote_image"
+USAGE3="${PROG} -h|--help"
+USAGE4="${PROG} --version"
+SCRIPT_VERSION=0.0.1
+
+HELP_TEXT="
+NAME
+    $PROG - $DESC
+
+SYNOPSIS
+    $USAGE1
+    $USAGE2
+    $USAGE3
+
+DESCRIPTION
+    This script is a front-end for \"docker tag\" and \"docker push\".
+
+    To tag and push, the script requires at least two arguments: a local image
+    name and a remote image name. If no tags are specified on the command line,
+    the local image name should include a tag; this will be applied to the
+    remote image. If the remote image should be pushed to a registry other
+    than dockerhub, the remote image name should start with the registry name.
+
+    If a semantic version string is provided via the --semver argument,
+    more tags will be added. Specifically, given a semantic version string of
+    the form
+
+        <major>.<minor>.<patch>[-<prerelease>][+<metadata>]
+
+    the following remote tags will be applied:
+
+        <major>.<minor>.<patch>+<metadata>
+        <major>.<minor>.<patch>
+        <major>.<minor>
+        <major>
+        latest
+
+    This script uses the docker-get-login if necessary to retrieve a command
+    for logging in to the remote registry.
+
+    The following arguments are currently supported:
+
+    --semver=semver
+        A semantic version number.
+
+    -h|--help
+        Print this help text and exit.
+
+    --version
+        Print the version number of the script and exit.
+"
+SCRIPTDIR=`cd \`dirname $0\`; pwd`
+. ${SCRIPTDIR}/citools-basics.rc || exit 1
+
+SEMVER=
+case $1 in
+    --semver=*)
+        SEMVER=`expr "$1" : '--semver=\(.*\)$'` || exit 1
+        shift ;;
+    -*)
+        echo "${PROG}: unknown option: $1" >&2
+        exit 1 ;;
+esac
+LOCAL_IMAGE="$1"
+if [ ":${LOCAL_IMAGE}" = ":" ] ; then
+    echo "${PROG}: local image name is required" >&2
+    exit 1
+fi
+shift
+REMOTE_IMAGE="$1"
+if [ ":${REMOTE_IMAGE}" = ":" ] ; then
+    echo "${PROG}: remote image name is required" >&2
+    exit 1
+fi
+shift
+remote_tag=`expr "${REMOTE_IMAGE}" : '.*:\([^:][^:]*\)$'`
+if [ ":${remote_tag}" != ":" ] ; then
+    TAGS="$@ ${remote_tag}"
+    REMOTE_IMAGE=`expr "${REMOTE_IMAGE}" : '\(.*\):[^:][^:]*$'`
+fi
+
+LOCAL_IMAGE_TAG=`expr "${LOCAL_IMAGE}" : '.*:\(.*\)$'`
+if [ ":${LOCAL_IMAGE_TAG}" != ":" ] ; then
+    TAGS="$@ ${LOCAL_IMAGE_TAG}"
+fi
+if [ ":${SEMVER}" != ":" ] ; then
+    mmp=`parse-semver -n ${SEMVER}` || exit 1
+    SEMVER_MAJOR_MINOR_PATCH="${mmp}"
+    META=`parse-semver -m ${SEMVER}` || exit 1
+    META=`echo ${META} | tr '+' '_'`
+    SEMVER_MAJOR_MINOR=`expr "${mmp}" : '\([0-9][0-9]*\.[0-9][0-9]*\)\..*'`
+    SEMVER_MAJOR=`expr "${mmp}" : '\([0-9][0-9]*\)\..*'`
+    TAGS="
+      ${TAGS}
+      ${SEMVER_MAJOR_MINOR_PATCH}${META}
+      ${SEMVER_MAJOR_MINOR_PATCH}
+      ${SEMVER_MAJOR_MINOR}
+      ${SEMVER_MAJOR}
+      latest"
+fi
+TAGS=`echo "${TAGS}" | sort -u`
+if [ ":${TAGS}" = ":" ] ; then
+    echo "${PROG}: no tags" >&2
+    exit 1
+fi
+
+for tag in ${TAGS} ; do
+    docker tag "${LOCAL_IMAGE}" "${REMOTE_IMAGE}:${tag}" || exit 1
+done
+
+eval `docker-get-login "${REMOTE_IMAGE}"` || exit 1
+
+docker push "${REMOTE_IMAGE}" || exit 1
+
+exit 0
+
+
+
