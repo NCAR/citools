@@ -4,7 +4,7 @@ DESC="Adaptor for the CICADA pipeline tools"
 USAGE1="${PROG} init"
 USAGE2="${PROG} register-image <image_metadata_file>"
 USAGE2="${PROG} get-image-tag <release_tag>"
-nUSAGE3="${PROG} verify-deployment-approved <image_tag> <deploy_env>"
+USAGE3="${PROG} verify-promotion <image_tag> <deploy_env>"
 USAGE4="${PROG} log-deployment <image_tag> <deploy_env>"
 USAGE5="${PROG} -h|--help"
 USAGE="Usage:
@@ -59,7 +59,7 @@ case command in
       fi
       cicada-image-tag --get "${release_tag}" || exit 1 ;;
 
-  verify-deployment-approved)
+  verify-promotion)
       image_tag="$1"
       deploy_env="$2"
       if [ ":${image_tag}" = ":" ] ; then
