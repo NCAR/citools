@@ -139,7 +139,7 @@ if [ ":${CIRCLE_TAG}" != ":" ] ; then
 fi
 PATH="${SCRIPTDIR}:${SAVED_PATH}"
 for var in PATH ${VARS} ; do
-    if [ ":$var" = ":" ] then continue ; fi
+    if [ ":$var" = ":" ] ; then continue ; fi
     eval val=\"\$${var}\"
     echo "$var=\"${val}\" export $var"
 done >"${INIT_RC}"
