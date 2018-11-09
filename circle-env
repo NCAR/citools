@@ -1,12 +1,12 @@
 #!/bin/sh
 PROG=circle-env
 DESC="Define circle-related env variables or verify they are set"
-USAGE1="${PROG} [--write]"
-USAGE2="${PROG} -h|--help"
-USAGE3="${PROG} --version"
+USAGE1="${PROG} env_file"
+USAGE2="${PROG}"
+USAGE3="${PROG} -h|--help"
+USAGE4="${PROG} --version"
 SCRIPT_VERSION=0.0.1
 
-DEFAULT_DEPLOYMENT_FRAMEWORK=cicada
 DEFAULT_PRERELEASE_ENVIRONMENTS="test staging"
 DEFAULT_PRODUCTION_ENVIRONMENT="production"
 
@@ -18,37 +18,35 @@ SYNOPSIS
     $USAGE1
     $USAGE2
     $USAGE3
+    $USAGE4
 
 DESCRIPTION
     This script either writes environment variable definitions to a given file
     for various CircleCI/citools variables, or verifies that the same variables
     are defined in the environment.
 
-    If the \"--write\" argument is given on the command line, the script will
-    write a file containing variable definitions. The name of the output file
-    will be written to standard output (see WORKSPACE and INIT_RC descriptions
-    below). The output file can subsequently be sourced (from a Bourne-ish
-    shell) to actually set the environment variables.
+    If a file argument is given on the command line, the script will write
+    environment variable definitions to the file. The file can subsequently
+    be sourced (from a Bourne-ish shell) to actually set the environment
+    variables.
 
-    Without the \"--write\" argument, the script verifies that the variables
+    Without the filename argument, the script verifies that the variables
     are defined and returns 1 if any are not. It is meant to be run from
     circle-* scripts.
 
     The following environment variables are defined/checked:
+
+    INIT_RC
+        The name of the file the script writes to. This file should be sourced
+        at the start of CircleCI \"run\" job steps to set environment
+        variables. The INIT_RC variable can be used by job steps
+        that need to modify the environment for subsequent job steps.
 
     WORKSPACE
         The absolute path of the CircleCI workspace root directory for the
         current workflow. This environment variable can be pre-set; any
         existing value will be used by the script; otherwise the parent of
         the script's own directory is used.
-
-    INIT_RC
-        The name of the file written when \"--write\" is given. This file
-        should be sourced at the start of CircleCI \"run\" job steps to set
-        environment variables. The INIT_RC variable can be used by job steps
-        that need to modify the environment for subsequent job steps. This
-        environment variable can be pre-set; any existing value will be used
-        by the script; otherwise \"\${WORKSPACE}/state/init.rc\" is used.
 
     STATEDIR
         A workspace subdirectory in which state information can be stored
@@ -60,10 +58,6 @@ DESCRIPTION
         can be installed once and shared among multiple jobs in a workflow.
         Defined to be the script's own directory.
     
-    DEPLOYMENT_FRAMEWORK
-        The name of the \"deployment framework\" for the current project.
-        Default is \"${DEFAULT_DEPLOYMENT_FRAMEWORK}\".
-
     PRERELEASE_ENVIRONMENTS
         An ordered list of supported prerelease deployment environments. The
         default is \"${DEFAULT_PRERELEASE_ENVIRONMENTS}\". The \"prerelease\"
@@ -89,18 +83,18 @@ DESCRIPTION
 SCRIPTDIR=`cd \`dirname $0\`; pwd`
 . ${SCRIPTDIR}/citools-basics.rc || exit 1
 
-if [ ":$1" = ":--write" ] ; then
+if [ ":$1" != ":" ] ; then
     MODE=write
+    INIT_RC=`cd \`dirname $1\`; pwd`/`basename $1`
 else
     MODE=check
 fi
 
 VARS="
- WORKSPACE
  INIT_RC
+ WORKSPACE
  STATEDIR
  LOCAL_BIN
- DEPLOYMENT_FRAMEWORK
  PRERELEASE_ENVIRONMENTS
  PRODUCTION_ENVIRONMENT
  DEFAULT_ENVIRONMENT
@@ -125,7 +119,6 @@ fi
 scriptparent=`dirname ${SCRIPTDIR}`
 WORKSPACE="${WORKSPACE:-${scriptparent}}"
 WORKSPACE=`cd ${WORKSPACE} ; pwd`
-INIT_RC="${INIT_RC:-${WORKSPACE}/state/init.rc}"
 
 STATEDIR="${WORKSPACE}/state"
 if [ ! -d "${STATEDIR}" ] ; then
@@ -134,7 +127,6 @@ fi
 
 LOCAL_BIN="${SCRIPTDIR}"
 
-DEPLOYMENT_FRAMEWORK="${DEPLOYMENT_FRAMEWORK:-${DEFAULT_DEPLOYMENT_FRAMEWORK}}"
 PRERELEASE_ENVIRONMENTS="${PRERELEASE_ENVIRONMENTS:-${DEFAULT_PRERELEASE_ENVIRONMENTS}}"
 PRODUCTION_ENVIRONMENT="${PRODUCTION_ENVIRONMENT:-${DEFAULT_PRODUCTION_ENVIRONMENT}}"
 set : ${PRERELEASE_ENVIRONMENTS}
@@ -149,5 +141,3 @@ for var in ${VARS} ; do
     eval val=\"\$${var}\"
     echo "$var=\"${val}\" export $var"
 done >"${INIT_RC}"
-
-echo "${INIT_RC}"
