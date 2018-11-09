@@ -1,7 +1,7 @@
 #!/bin/sh
 PROG="circle-install-tools"
 DESC="Install miscellaneous tools for a CircleCI workflow"
-USAGE1="${PROG}"
+USAGE1="${PROG} [bindir]"
 USAGE2="${PROG} -h|--help"
 SCRIPT_VERSION=0.0.1
 
@@ -16,6 +16,8 @@ SYNOPSIS
 
 DESCRIPTION
     Install miscellaneous tools that might be needed in CircleCI job steps.
+    The installation directory can be provided as a command-line argument
+    (default=$BINDIR).
 "
 SCRIPTDIR=`cd \`dirname $0\`; pwd`
 . ${SCRIPTDIR}/citools-basics.rc || exit 1
@@ -24,6 +26,10 @@ SCRIPTDIR=`cd \`dirname $0\`; pwd`
 circle-env || exit 1
 
 BINDIR="${LOCAL_BIN}"
+if [ ":$1" != ":" ] ; then
+    cd $1 || exit 1
+    BINDIR=`pwd` 
+fi
 
 echo "Installing jq..."
 install-jq "${BINDIR}"
