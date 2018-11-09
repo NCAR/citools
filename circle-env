@@ -80,6 +80,7 @@ DESCRIPTION
         a valid semantic version string even if it starts with a \"v\" or
         \"V\"; in this case, SEMVER will not include this initial letter.
 "
+SAVED_PATH="${PATH}"
 SCRIPTDIR=`cd \`dirname $0\`; pwd`
 . ${SCRIPTDIR}/citools-basics.rc || exit 1
 
@@ -136,8 +137,8 @@ export PRERELEASE_ENVIRONMENTS PRODUCTION_ENVIRONMENT DEFAULT_ENVIRONMENT
 if [ ":${CIRCLE_TAG}" != ":" ] ; then
     SEMVER=`${SCRIPTDIR}/parse-semver -npm "${CIRCLE_TAG}" 2>/dev/null`
 fi
-
-for var in ${VARS} ; do
+PATH="${SCRIPTDIR}:${SAVED_PATH}"
+for var in PATH ${VARS} ; do
     eval val=\"\$${var}\"
     echo "$var=\"${val}\" export $var"
 done >"${INIT_RC}"
