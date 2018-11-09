@@ -84,7 +84,6 @@ SAVED_PATH="${PATH}"
 SCRIPTDIR=`cd \`dirname $0\`; pwd`
 . ${SCRIPTDIR}/citools-basics.rc || exit 1
 
-set -vx
 if [ ":$1" != ":" ] ; then
     MODE=write
     INIT_RC=`cd \`dirname $1\`; pwd`/`basename $1`
@@ -139,7 +138,6 @@ if [ ":${CIRCLE_TAG}" != ":" ] ; then
 fi
 PATH="${SCRIPTDIR}:${SAVED_PATH}"
 for var in PATH ${VARS} ; do
-    if [ ":$var" = ":" ] ; then continue ; fi
     eval val=\"\$${var}\"
     echo "$var=\"${val}\" export $var"
 done >"${INIT_RC}"

@@ -52,5 +52,7 @@ elif [ ":$registry" = "dockerhub" ] ; then
     variable=DOCKERHUB_DOCKER_LOGIN
 fi
 login=`docker-get-login "$1" 2>/dev/null`
-echo "${variable}=\"${login}\"" >>${INIT_RC}
+if [ ":$login" != ":" ] ; then
+    echo "${variable}=\"${login}\"" >>${INIT_RC}
+fi
 exit 0
