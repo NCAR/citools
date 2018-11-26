@@ -48,7 +48,7 @@ trap "rm -rf ${TMPFILE} ${INDEXFILE}.tmp ; exit 1" 0 1 2 13 15
 set -vx
 find . -type f ! -name '*~' -perm -0005 -exec grep -l '^PROG=' {} \; \
 | while read file ; do
-    relpath=`expr "${file}" : '\./\(.*\)$'`
+    base=`basename "${file}"`
     descline=`sed -n -e '/^DESC=/p' ${file}`
     eval ${descline}
     echo '```text' >${TMPFILE}
@@ -58,7 +58,7 @@ find . -type f ! -name '*~' -perm -0005 -exec grep -l '^PROG=' {} \; \
         dir=`dirname "${DOCDIR}/${file}"`
         mkdir -p "${dir}"
         mv "${TMPFILE}" "${DOCDIR}/${file}.md"
-        echo "- [${relpath}](${WIKI_URL}/${relpath}) - ${DESC}" >>${INDEXFILE}.tmp
+        echo "- [${relpath}](${WIKI_URL}/${base}) - ${DESC}" >>${INDEXFILE}.tmp
     fi
 done
 
