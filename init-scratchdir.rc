@@ -1,0 +1,16 @@
+:
+#
+# Use intermediate scratch files. This makes scripting with a primitive shell
+# easier, and it is helpful with debugging.
+#
+# If you source this, be sure to source cleanup-scratchdir.rc before exiting
+#
+if [ ":${SCRATCHDIR}" = ":" ] ; then
+    CITOOLS_TMPDIR="/tmp/citools$$.d"
+    SCRATCHDIR="${CITOOLS_TMPDIR}"
+    mkdir -p "${CITOOLS_TMPDIR}" || exit 1
+    trap "rm -rf ${CITOOLS_TMPDIR} ; exit 1" 0 1 2 13 15
+else
+    CITOOLS_TMPDIR=""
+fi
+

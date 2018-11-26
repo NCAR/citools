@@ -1,0 +1,78 @@
+#!/bin/sh
+PROG=circle-build-push
+DESC="Conditionally build, push, and register a docker image"
+USAGE1="${PROG} build-args..."
+
+HELP_DESC="
+This script ensures that there is a registered docker image for the
+current project's \$CIRCLE_TAG release. If there isn't one, the
+script builds a new image and metadata file, tags the image with the
+default deployment environment tag and pushes it to its registry, and
+registers the image metadata file.
+
+In either case, the script stores the image tag to the CircleCI
+workspace for later access.
+"
+HELP_ARGS="
+    build_args...
+        All other arguments are passed to docker-cibuild.
+"
+HELP_ENV="
+The script assumes all variables managed by circle-env have been set. In
+addition, the following are all required:
+
+GH_TOKEN
+    A GitHub Personal Access Token that allows read access to the target
+    repo.
+
+IMAGE_NAME
+    The tag-less name of the target image in its docker registry.
+"
+
+SCRIPTDIR=`cd \`dirname $0\`; pwd`
+. ${SCRIPTDIR}/citools-basics.rc || exit 1
+
+if [ ":${CITOOLS_CIRCLE_ENV}" != ":true" ] ; then
+    . "${INIT_RC}" || exit 1
+fi
+# Verify all needed environment variables are set
+circle-env || exit 1
+
+if [ $CIRCLE_TAG_IS_SEMVER = false ] ; then
+    echo "${PROG}: \$CIRCLE_TAG must be a semantic version string" >&2
+    exit 1
+fi
+if [ ":${GH_TOKEN}" = ":" ] ; then
+    echo "${PROG}: GH_TOKEN environment variable must be set"
+    exit 1
+fi
+if [ ":${IMAGE_NAME}" = ":" ] ; then
+    echo "${PROG}: IMAGE_NAME environment variable must be set"
+    exit 1
+fi
+
+${CDIMPL} get-image-metadata ${STATEDIR}/image-meta
+if [ -s "${STATEDIR}/image-meta" ] ; then
+    vecho "Image for ${CIRCLE_TAG_NUM}${CIRCLE_TAG_META} already exists"
+    exit 0
+fi
+
+vecho "Running docker-cibuild --metadata=${STATEDIR}/image-meta $@"
+docker-cibuild --metadata=${STATEDIR}/image-meta "$@" || exit 1
+
+vecho "${STATEDIR}/image-meta: "
+if truthy "${CITOOLS_VERBOSE}" ; then
+    cat "${STATEDIR}/image-meta" >&2
+fi
+# Following . command will set REPO_NAME,  IMAGE_TAG, and other vars
+. ${STATEDIR}/image-meta || exit 1
+
+vecho "Running docker-tag-push ${REPO_NAME}:${IMAGE_TAG} ${IMAGE_NAME} ${IMAGE_TAG}"
+docker-tag-push ${REPO_NAME}:${IMAGE_TAG} ${IMAGE_NAME} ${IMAGE_TAG} || exit 1
+
+vecho "Running ${CDIMPL} register-image-metadata ${STATEDIR}/image-meta"
+${CDIMPL} register-image-metadata "${STATEDIR}/image-meta" || exit 1
+
+exit 0
+
+

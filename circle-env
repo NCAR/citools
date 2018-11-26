@@ -3,82 +3,77 @@ PROG=circle-env
 DESC="Define circle-related env variables or verify they are set"
 USAGE1="${PROG} env_file"
 USAGE2="${PROG}"
-USAGE3="${PROG} -h|--help"
-USAGE4="${PROG} --version"
-SCRIPT_VERSION=0.0.1
 
-DEFAULT_PRERELEASE_ENVIRONMENTS="test staging"
-DEFAULT_PRODUCTION_ENVIRONMENT="production"
+DEFAULT_CDIMPL="cicada"
+DEFAULT_REGISTRY_PREFIX="ncar"
 
-HELP_TEXT="
-NAME
-    $PROG - $DESC
+HELP_DESC="
+This script either writes environment variable definitions to a given file
+for various CircleCI/citools variables, or verifies that the same variables
+are defined in the environment.
 
-SYNOPSIS
-    $USAGE1
-    $USAGE2
-    $USAGE3
-    $USAGE4
+If a file argument is given on the command line, the script will write
+environment variable definitions to the file. The file can subsequently
+be sourced (from a Bourne-ish shell) to actually set the environment
+variables.
 
-DESCRIPTION
-    This script either writes environment variable definitions to a given file
-    for various CircleCI/citools variables, or verifies that the same variables
-    are defined in the environment.
+Without the filename argument, the script verifies that the variables
+are defined and returns 1 if any are not. It is meant to be run from
+circle-* scripts.
+"
+HELP_ENV="
+When writing variable definitions, the following environment variables can
+be predefined; their values will be propagated through if set, and
+initialized otherwise:
 
-    If a file argument is given on the command line, the script will write
-    environment variable definitions to the file. The file can subsequently
-    be sourced (from a Bourne-ish shell) to actually set the environment
-    variables.
+CDIMPL
+    The name of the \"deployment service\" to use. Default is
+    \"${DEFAULT_CDIMPL}\". This name must correspond to a script in the
+    \$LOCAL_BIN directory. See CDIMPL-README.md.
 
-    Without the filename argument, the script verifies that the variables
-    are defined and returns 1 if any are not. It is meant to be run from
-    circle-* scripts.
+LOCAL_BIN
+    The directory where additional software should be defined for use by
+    CircleCI jobs.
 
-    The following environment variables are defined/checked:
+STATEDIR
+    A workspace subdirectory in which state information can be stored
+    for sharing among jobs.
 
-    INIT_RC
-        The name of the file the script writes to. This file should be sourced
-        at the start of CircleCI \"run\" job steps to set environment
-        variables. The INIT_RC variable can be used by job steps
-        that need to modify the environment for subsequent job steps.
+WORKSPACE
+    The absolute path or path relative to \$CIRCLE_WORKING_DIRECTORY of the
+    CircleCI workspace root directory for the current workflow.
 
-    WORKSPACE
-        The absolute path of the CircleCI workspace root directory for the
-        current workflow. This environment variable can be pre-set; any
-        existing value will be used by the script; otherwise the parent of
-        the script's own directory is used.
+When writing variable definitions, the following environment variables will
+always be defined from scratch:
 
-    STATEDIR
-        A workspace subdirectory in which state information can be stored
-        for sharing among jobs. Defined to be \${WORKSPACE}/state.
+CIRCLE_TAG_IS_SEMVER
+    \"true\" if the CIRCLE_TAG environment variable is set and is a valid
+    semantic version string, \"false\" otherwise.
 
-    LOCAL_BIN
-        The directory where additional software should be defined for use by
-        CircleCI jobs. This should be under \${WORKSPACE} so that software
-        can be installed once and shared among multiple jobs in a workflow.
-        Defined to be the script's own directory.
-    
-    PRERELEASE_ENVIRONMENTS
-        An ordered list of supported prerelease deployment environments. The
-        default is \"${DEFAULT_PRERELEASE_ENVIRONMENTS}\". The \"prerelease\"
-        component of all semanic version tags should match one of these values
-        if present. The first name in the list is the default deployment
-        environment when an image is first pushed. The second is the next
-        environment in the pipeline when the image is promoted, etc.
+CIRCLE_TAG_NUM
+    If CIRCLE_TAG environment variable is set and is a valid semantic
+    version string, the numeric (major.minor.patch) portion of the tag.
 
-    PRODUCTION_ENVIRONMENT
-        The name of the non-prerelease deployment environment. Default is
-        \"${DEFAULT_PRODUCTION_ENVIRONMENT}\".
+CIRCLE_TAG_PRERELEASE
+    If CIRCLE_TAG environment variable is set and is a valid semantic
+    version string with a prerelease component, the prerelease portion of
+    the tag (with its leading \"-\").
 
-    DEFAULT_ENVIRONMENT
-        The default deployment environment for new images. Defined as the first
-        name in the PRERELEASE_ENVIRONMENTS list.
+CIRCLE_TAG_META
+    If CIRCLE_TAG environment variable is set and is a valid semantic
+    version string with a metadata component, the metadata portion of
+    the tag (with its leading \"+\").
 
-    SEMVER
-        Iff the CIRCLE_TAG environment variable is set and is a valid semantic
-        version string, a copy of \$CIRCLE_TAG. \$CIRCLE_TAG will be treated as
-        a valid semantic version string even if it starts with a \"v\" or
-        \"V\"; in this case, SEMVER will not include this initial letter.
+CITOOLS_CIRCLE_ENV
+    Always set to "true" by this script.
+
+INIT_RC
+    The name of the file the script writes to. This file should be sourced
+    at the start of CircleCI \"run\" job steps to set environment
+    variables. The INIT_RC variable can be used by job steps that need to
+    modify the environment for subsequent job steps. When writing variable
+    definitions, if this is pre-defined and does not match the file name
+    given on the command line, the script will abort.
 "
 SAVED_PATH="${PATH}"
 SCRIPTDIR=`cd \`dirname $0\`; pwd`
@@ -86,26 +81,41 @@ SCRIPTDIR=`cd \`dirname $0\`; pwd`
 
 if [ ":$1" != ":" ] ; then
     MODE=write
-    INIT_RC=`cd \`dirname $1\`; pwd`/`basename $1`
+    init_rc=`cd \`dirname $1\`; pwd`/`basename $1`
+    if [ ":${INIT_RC}" != ":" ] ; then
+        INIT_RC=`cd \`dirname ${INIT_RC}\`; pwd`/`basename ${INIT_RC}`
+        if [ ":${init_rc}" != ":${INIT_RC}" ] ; then
+            echo "${PROG}: INIT_RC variable does not match ${init_rc}" >&2
+            exit 1
+        fi
+    fi
+    INIT_RC="${init_rc}"
 else
     MODE=check
 fi
 
 VARS="
- INIT_RC
- WORKSPACE
- STATEDIR
+ CDIMPL
  LOCAL_BIN
- PRERELEASE_ENVIRONMENTS
- PRODUCTION_ENVIRONMENT
- DEFAULT_ENVIRONMENT"
-if [ ":${CIRCLE_TAG}" != ":" ] ; then
-    VARS="$VARS SEMVER"
-fi
+ STATEDIR
+ WORKSPACE
+ INIT_RC
+ CIRCLE_TAG_IS_SEMVER
+ CITOOLS_CIRCLE_ENV
+"
+SEMVER_VARS="
+ CIRCLE_TAG_NUM
+ CIRCLE_TAG_PRERELEASE
+ CIRCLE_TAG_META
+"
+
 if [ $MODE = check ] ; then
+    if [ ":${CIRCLE_TAG_IS_SEMVER}" = ":true" ] ; then
+       VARS="${VARS}${SEMVER_VARS}"
+    fi
     init_err=n
     for var in ${VARS} ; do
-        eval val=\"\$$var\"
+        eval val=\"\$${var}\"
         if [ ":$val" = ":" ] ; then
             echo "${PROG}: variable $var is not set" >&2
             init_err=y
@@ -116,25 +126,29 @@ if [ $MODE = check ] ; then
     fi
     exit 0
 fi
-scriptparent=`dirname ${SCRIPTDIR}`
-WORKSPACE="${WORKSPACE:-${scriptparent}}"
-WORKSPACE=`cd ${WORKSPACE} ; pwd`
+CITOOLS_CIRCLE_ENV=true
 
-STATEDIR="${WORKSPACE}/state"
-if [ ! -d "${STATEDIR}" ] ; then
-    mkdir -p "${STATEDIR}" || exit 1
+if [ ":${WORKSPACE}" = ":" ] ; then
+    WORKSPACE=`dirname ${SCRIPTDIR}`
 fi
 
-LOCAL_BIN="${SCRIPTDIR}"
+STATEDIR="${STATEDIR:-${WORKSPACE}/state}"
+LOCAL_BIN="${LOCAL_BIN:=${SCRIPTDIR}}"
 
-PRERELEASE_ENVIRONMENTS="${PRERELEASE_ENVIRONMENTS:-${DEFAULT_PRERELEASE_ENVIRONMENTS}}"
-PRODUCTION_ENVIRONMENT="${PRODUCTION_ENVIRONMENT:-${DEFAULT_PRODUCTION_ENVIRONMENT}}"
-set : ${PRERELEASE_ENVIRONMENTS}
-DEFAULT_ENVIRONMENT="$2"
-export PRERELEASE_ENVIRONMENTS PRODUCTION_ENVIRONMENT DEFAULT_ENVIRONMENT
+CDIMPL="${CDIMPL:-${DEFAULT_CDIMPL}}"
+if [ ! -x "${SCRIPTDIR}/${CDIMPL}" ] ; then
+    echo "${PROG}: ${CDIMPL} is not a known deployment service" >&2
+    exit 1
+fi
 
+CIRCLE_TAG_IS_SEMVER=false
 if [ ":${CIRCLE_TAG}" != ":" ] ; then
-    SEMVER=`${SCRIPTDIR}/parse-semver -npm "${CIRCLE_TAG}" 2>/dev/null`
+    CIRCLE_TAG_NUM=`parse-semver -n ${CIRCLE_TAG}`
+    CIRCLE_TAG_PRERELEASE=`parse-semver -p ${CIRCLE_TAG}`
+    CIRCLE_TAG_META=`parse-semver -m ${CIRCLE_TAG}`
+    if [ ":${CIRCLE_TAG_NUM}" != ":" ] ; then
+        CIRCLE_TAG_IS_SEMVER=true
+    fi
 fi
 PATH="${SCRIPTDIR}:${SAVED_PATH}"
 for var in PATH ${VARS} ; do

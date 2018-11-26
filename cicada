@@ -2,105 +2,43 @@
 PROG="cicada"
 DESC="Adaptor for the CICADA pipeline tools"
 USAGE1="${PROG} init"
-USAGE2="${PROG} register-image <image_metadata_file>"
-USAGE2="${PROG} get-image-tag <release_tag>"
-USAGE3="${PROG} verify-promotion <image_tag> <deploy_env>"
-USAGE4="${PROG} log-deployment <image_tag> <deploy_env>"
-USAGE5="${PROG} -h|--help"
-USAGE="Usage:
-    $USAGE1
-    $USAGE2
-    $USAGE3
-    $USAGE4
-    $USAGE5
-"
-SCRIPT_VERSION=0.0.1
+USAGE2="${PROG} register-image-metadata <image_metadata_file>"
+USAGE3="${PROG} get-image-metadata <image_metadata_file>"
+USAGE4="${PROG} request-deployment-approval <image_metadata_file>"
+USAGE5="${PROG} register-deployment <image_metadata_file>"
+
 CICADA_REPO=gwilliam-ucar-edu/CICADA
 
-HELP_TEXT="
-NAME
-    $PROG - $DESC
+HELP_DESC="
+This script is an adaptor for the CICADA CD implementation See
+CDIMPL-README.md.
 
-SYNOPSIS
-    $USAGE1
-    $USAGE2
-    $USAGE3
-    $USAGE4
-    $USAGE5
-
-DESCRIPTION
-    This script is an adaptor for the CICADA pipeline tools.
-
+Cicada can handle both the pipeline management and image mapping
+responsibilities required of a CircleCI CD implementor. It uses branches
+in a special GitHub repo (called CICADA) and CircleCI branch-triggered
+jobs to handle pipeline management, and it uses GitHub release objects
+and their assets to handing image mapping.
 "
 SCRIPTDIR=`cd \`dirname $0\`; pwd`
 . ${SCRIPTDIR}/citools-basics.rc || exit 1
 
+PATH="${SCRIPTDIR}/cicada-bin:$PATH" export PATH
+
 case command in
   init)
-      cicada-init || exit 1 ;;
+      cicada-client-init || exit 1 ;;
 
-  register-image)
-      image_metadata_file="$1"
-      if [ ":${image_metadata_file}" = ":" ] ; then
-          echo "${PROG}: image_metadata_file is required" >&2
-          echo $USAGE >&2
-          exit 1
+  register-image-metadata)
+      cicada-image-register "$1" || exit 1 ;;
 
-      fi
-      cicada-image-tag --register "${image_metadata_file}" || exit 1 ;;
+  get-image-metadata)
+      cicada-image-get-metadata $1 || exit 1 ;;
 
-  get-image-tag)
-      release_tag="$1"
-      if [ ":${release_tag}" = ":" ] ; then
-          echo "${PROG}: release_tag is required" >&2
-          echo $USAGE >&2
-          exit 1
+  request-deployment-approval)
+      cicada-request-approval || exit 1 ;;
 
-      fi
-      cicada-image-tag --get "${release_tag}" || exit 1 ;;
-
-  verify-promotion)
-      image_tag="$1"
-      deploy_env="$2"
-      if [ ":${image_tag}" = ":" ] ; then
-          echo "${PROG}: image_tag is required" >&2
-          echo $USAGE >&2
-          exit 1
-
-      fi
-      if [ ":${deploy_env}" = ":" ] ; then
-          echo "${PROG}: deploy_env is required" >&2
-          echo $USAGE >&2
-          exit 1
-
-      fi
-      logentry=`cicada-log --read \
-                 --branch=${CIRCLE_PROJECT_REPONAME}-${deploy_env} \
-                 --image="${image_tag}" --type=approved`
-      if [ ":${logentry}" = ":" ] ; then
-          echo "${PROG} ${command}: not approved for promotion" >&2
-          exit 1
-      fi
-      exit 0 ;;
-
-  log-deployment)
-      image_tag="$1"
-      deploy_env="$2"
-      if [ ":${image_tag}" = ":" ] ; then
-          echo "${PROG}: image_tag is required" >&2
-          echo $USAGE >&2
-          exit 1
-
-      fi
-      if [ ":${deploy_env}" = ":" ] ; then
-          echo "${PROG}: deploy_env is required" >&2
-          echo $USAGE >&2
-          exit 1
-
-      fi
-      cicada-log --write \
-                 --branch=${CIRCLE_PROJECT_REPONAME}-${deploy_env} \
-                 --image="${image_tag}" --type=deployed || exit 1 ;;
+  register-deployment)
+      cicada-register-deployment || exit 1 ;;
 
   *)
     echo "${PROG}: unknown command: $1" >&2

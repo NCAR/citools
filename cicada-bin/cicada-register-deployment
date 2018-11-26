@@ -1,0 +1,32 @@
+#!/bin/sh
+PROG=cicada-register-deployment
+DESC="Register the successful deployment of an image"
+USAGE1="${PROG}"
+
+HELP_DESC="
+CICADA logs approvals and deployments to log files in the master branch of
+the CICADA repo. This script logs a deployment, then executes any
+follow-up actions specified in the CICADA configuration.
+"
+SCRIPTDIR=`cd \`dirname $0\`; pwd`
+SCRIPTPARENT=`dirname ${SCRIPTDIR}`
+. ${SCRIPTPARENT}/citools-basics.rc || exit 1
+PATH="${SCRIPTPARENT}:${SCRIPTDIR}:$PATH" export PATH
+
+cicada-client-init --check || exit 1
+
+IMAGE_TAG=`cicada-image-get-metadata IMAGE_TAG` || exit 1
+
+vecho "Writing log entry to CICADA"      
+cicada-log-write \
+    --project=${CIRCLE_PROJECT_REPONAME} \
+    --deploy-env=${DEPLOY_ENV} \
+    --type=deployed \
+    --image-tag=${IMAGE_TAG} || exit 1
+
+if [ ":${POST_DEPLOY}" != ":" ] ; then
+    vecho "Running ${POST_DEPLOY}"      
+    eval "${POST_DEPLOY}" || exit 1
+fi
+exit 0
+

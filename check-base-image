@@ -3,63 +3,41 @@ PROG=check-base-image
 DESC="Docker base image update checker"
 USAGE1="${PROG} [-v|--verbose] [--changefile=file] image"
 USAGE2="${PROG} -h|--help"
-USAGE="Usage:
-    ${USAGE1}
-    ${USAGE2}"
 
-# This script uses primitive but portable dialects of sh and awk
-PATH="/usr/local/bin:/usr/local/sbin:/bin:/sbin:/usr/bin:/usr/sbin"
-export PATH
-if test ":$1" = ":--help" ; then
-    cat <<EOF
-NAME
-    $PROG - $DESC
+HELP_DESC="
+Given the id or name of a specific docker image that was built using
+the docker-build script, this script checks whether the base image used by
+the named image has been updated.
 
-SYNOPSIS
-    $USAGE1
-    $USAGE2
+The docker-build script adds labels to the image it builds specifying the
+\"tag name\" and the \"digest name\" of the base image. The \"tag name\" is
+what is generally used in a Dockerfile's FROM statements (a name of the form
+<image>[:<tag>]), while the \"digest name\" is a name of the form
+<image>@<digest>. While the same tag name can be assigned to different
+image instances over time, the digest name will always refer to the same
+instance.
 
-DESCRIPTION
-    Given the id or name of a specific docker image that was built using
-    the docker-build script, this script checks whether the base image used by
-    the named image has been updated.
+This script retrieves the tag name and digest name for the base image,
+then pulls the base image using the tag name and compares its digest
+with the base image digest name it got from the named image. If the
+two digests do not match, the base image is assumed to have been
+updated.
 
-    The docker-build script adds labels to the image it builds specifying the
-    "tag name" and the "digest name" of the base image. The "tag name" is what
-    is generally used in a Dockerfile's FROM statements (a name of the form
-    <image>[:<tag>]), while the "digest name" is a name of the form
-    <image>@<digest>. While the same tag name can be assigned to different
-    image instances over time, the digest name will always refer to the same
-    instance.
-
-    This script retrieves the tag name and digest name for the base image,
-    then pulls the base image using the tag name and compares its digest
-    with the base image digest name it got from the named image. If the
-    two digests do not match, the base image is assumed to have been
-    updated.
-
-    The script returns 0 if the base image has not changed, and 2 if an error
-    occurs. If the base image has changed, the script will return 1 if the
-    --changefile=file argument is absent, but 0 if it is present.
-
-    The following command-line arguments are supported:
-
-    --changefile=file
-        If the base image has changed, write the digest of the new base image
-        to the indicated file. If the base image has not changed, ensure the
-        indicated file does not exist. This also changes the return value of
-        the script: if given, the exit value will only be non-zero if an error
-        occurs. This argument makes it easier to use the script in CircleCI
-        jobs.
-
-    -v|--verbose
-        Be verbose.
-
-    -h|--help
-        Print this help text and exit.
-EOF
-    exit 0
-fi
+The script returns 0 if the base image has not changed, and 2 if an error
+occurs. If the base image has changed, the script will return 1 if the
+--changefile=file argument is absent, but 0 if it is present.
+"
+HELP_OPTS="
+--changefile=file
+    If the base image has changed, write the digest of the new base image
+    to the indicated file. If the base image has not changed, ensure the
+    indicated file does not exist. This also changes the return value of
+    the script: if given, the exit value will only be non-zero if an error
+    occurs. This argument makes it easier to use the script in CircleCI
+    jobs.
+"
+SCRIPTDIR=`cd \`dirname $0\`; pwd`
+. ${SCRIPTDIR}/citools-basics.rc || exit 1
 
 CHANGEFILE=
 VERBOSE=n

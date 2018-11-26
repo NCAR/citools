@@ -2,92 +2,84 @@
 PROG=docker-cibuild
 DESC="Run \"docker build\" with added labels, produce metadata"
 USAGE1="${PROG} [--metadata=file] <BUILD_OPTS>"
-USAGE2="${PROG} -h|--help"
-USAGE3="${PROG} --version"
-USAGE="Usage:
-    ${USAGE1}
-    ${USAGE2}
-    ${USAGE3}"
-SCRIPT_VERSION=0.0.1
 METADATA_VERSION=1.0.0
 
-HELP_TEXT="
-NAME
-    $PROG - $DESC
+HELP_DESC="
+This script passes all arguments with the exception of \"--metadata=*\"
+to \"docker build\" and adds some useful \"--label\" arguments; it also
+captures the output, extracts data from it, and supplements it with
+information from \"docker inspect\" and git; this metadata is written to
+the file named in the --metadata= argument, or to standard output.
+If a semantic version number can be determined, it also tags the image
+with unique tag of the form 
 
-SYNOPSIS
-    $USAGE1
-    $USAGE2
-    $USAGE3
+    <semver_num>-<YYYYmmdd>T<HHMMSS>Z[<semver_meta>]
 
-DESCRIPTION
-    This script passes all arguments with the exception of \"--metadata=*\"
-    to \"docker build\" and adds some useful \"--label\" arguments; it also
-    captures the output, extracts data from it, and supplements it with
-    information from \"docker inspect\" and git; this metadata is written to
-    the file named in the --metadata= argument, or to standard output.
-    If a semantic version number can be determined, it also tags the image
-    with unique tag of the form \"<semver_num>_<YYYYmmdd.HHMMSS>Z\", where
-    <semver_num> is the numeric \"major.minor.patch\" portion of the semantic
-    version string, and <YYYmmdd.HHMMSS> is a UTC timestamp reflecting the
-    creation time of the image.
+where <semver_num> is the numeric \"major.minor.patch\" portion of the
+semantic version string, and <YYYmmdd>T<HHMMSS>Z is a UTC timestamp
+reflecting the creation time of the image, and <semver_meta> is the
+metadata portion of the semantic version string, with \".\" in place of
+\"+\". For example, given the semantic version string \"1.0.2-beta+build2\"
+and a creation time of 2018-10-28T14:22:13Z, the tag would be
+\"1.0.2-20181028T142213Z.build2\". Note that the build tag is itself
+a valid semantic version string.
 
-    Note that this will not work if the -q|--quiet option to \"docker
-    build\" is given.
+Note that this will not work if the -q|--quiet option to \"docker
+build\" is given.
 
-    The following arguments are automatically passed to \"docker build\" in
-    addition to any provided arguments:
-        --label git.remote.origin=<github_repo_url>
-        --label git.revision.sha1=<git_commit_hash>
-        --label version=<semver>
+The following arguments are automatically passed to \"docker build\" in
+addition to any provided arguments:
+    --label git.remote.origin=<github_repo_url>
+    --label git.revision.sha1=<git_commit_hash>
+    --label version=<semver>
 
-    The script is meant to be executed as part of an automated build when a
-    \"release tag\" is assigned to a release. In CircleCI, the release tag is
-    available in the CIRCLE_TAG environment variable when a build is
-    triggered via a tag. The script will actually check the RELEASE_TAG
-    environment variable first, then CIRCLE_TAG. If a release tag is
-    provided, it should be a valid semantic version tag.
+The script is meant to be executed as part of an automated build when a
+\"release tag\" is assigned to a release. In CircleCI, the release tag is
+available in the CIRCLE_TAG environment variable when a build is
+triggered via a tag. The script will actually check the RELEASE_TAG
+environment variable first, then CIRCLE_TAG. If a release tag is
+provided, it should be a valid semantic version tag.
 
-    The output from \"docker build\" will be written to standard output. If
-    no \"--metadata=file\" argument is given, the metadata will follow.
-    In any case, metadata is presented as \"<parameter>=<value>\"
-    definitions, one per line, in the given order:
+The output from \"docker build\" will be written to standard output. If
+no \"--metadata=file\" argument is given, the metadata will follow.
+In any case, metadata is presented as \"<parameter>=<value>\"
+definitions, one per line, in the given order:
 
-      Parameter         Value
-      ---------         -----
-      METADATA_VERSION  The version of the metadata format; current value is
-                        \"${METADATA_VERSION}\".
-      REMOTE_ORIGIN     The github repo URL
-      REPO_OWNER        The username of the github repo owner
-      REPO_NAME         The name of the github repo
-      REVISION_SHA1     The full sha1 hash of the current git revision
-      VERSION           A version string for the current revision; the
-                        environment variable RELEASE_TAG is used if set,
-                        otherwise the environment variable CIRCLE_TAG is used.
-      IMAGE_CREATED     The ISO8601 UTC creation time of the image (nanosecond
-                        resolution)
-      IMAGE_DIGEST      The digest of the image (with leading \"sha256:\")
-      IMAGE_ID          The first 12 characters of the image digest
-      IMAGE_TAG         The tag assigned to the image by the script, if there
-                        is one. The tag is of the form <semver_num>_<timestamp>
-                        (See description above.)
-      BASE_TAG          The full (pullable) \"tag name\" of the base image
-      BASE_DIGEST       The full (pullable) \"digest name\" of the base image
-      BASE_REPO_OWNER   The username of the github repo owner of the base image
-                        project, if the base image was built by this script.
-      BASE_REPO_NAME    The name of the github repo of the base image project,
-                        if the base image was built by this script.
-      BASE_VERSION      The release tag of the base image, if the base image
-                        was built by this script.
+  Parameter         Value
+  ---------         -----
+  METADATA_VERSION  The version of the metadata format; current value is
+                    \"${METADATA_VERSION}\".
+  REMOTE_ORIGIN     The github repo URL
+  REPO_OWNER        The username of the github repo owner
+  REPO_NAME         The name of the github repo
+  REVISION_SHA1     The full sha1 hash of the current git revision
+  VERSION           A version string for the current revision; the
+                    environment variable RELEASE_TAG is used if set,
+                    otherwise the environment variable CIRCLE_TAG is used.
+  IMAGE_CREATED     The ISO8601 UTC creation time of the image (nanosecond
+                    resolution)
+  IMAGE_DIGEST      The digest of the image (with leading \"sha256:\")
+  IMAGE_ID          The first 12 characters of the image digest
+  IMAGE_TAG         The tag assigned to the image by the script, if there
+                    is one. The tag is of the form
+                    <semver_num>-<timestamp>[<semver_meta>] (see
+                    description above.)
+  BASE_TAG          The full (pullable) \"tag name\" of the base image
+  BASE_DIGEST       The full (pullable) \"digest name\" of the base image
+  BASE_REPO_OWNER   The username of the github repo owner of the base image
+                    project, if the base image was built by this script.
+  BASE_REPO_NAME    The name of the github repo of the base image project,
+                    if the base image was built by this script.
+  BASE_VERSION      The release tag of the base image, if the base image
+                    was built by this script.
+"
+HELP_ENV="
+RELEASE_TAG
+    If given, a (nominally semantic) version tag for the release. If not
+    explicitly set, \$CIRCLE_TAG is used.
 
-    The following command-line arguments are supported:
-
-    -h|--help
-        Print a help message and quit.
-
-    --version
-        Print the name and version of the script and quit.
-
+CIRCLE_TAG
+    The active release tag. Set by CircleCI.
 "
 
 SCRIPTDIR=`cd \`dirname $0\`; pwd`
@@ -114,8 +106,10 @@ if [ ":${version}" != ":" ] ; then
     set : --label "version=${version}" "$@"
     shift
     SEMVER_NUM=`parse-semver -n "${version}" 2>/dev/null`
+    SEMVER_META=`parse-semver -m "${version}" 2>/dev/null | tr '+' '.'`
 else
     SEMVER_NUM=
+    SEMVER_META=
 fi
 
 toplevel=`git rev-parse --show-toplevel 2>/dev/null`
@@ -186,11 +180,11 @@ fi
 # Split out owners and repo names from remote git URLs.
 IFS_SAVE="${IFS}"
 IFS="${IFS}/:"
-eval set x ${gitRemoteOrigin} ; shift
+eval set : ${gitRemoteOrigin} ; shift
 while [ $# -gt 2 ] ; do shift ; done
 repoOwner="$1"
 repoName=`basename "$2" .git`
-eval set x ${baseRemoteOrigin} ; shift
+eval set : ${baseRemoteOrigin} ; shift
 while [ $# -gt 2 ] ; do shift ; done
 baseRepoOwner="$1"
 baseRepoName=`basename "$2" .git`
@@ -199,8 +193,8 @@ IFS="${IFS_SAVE}"
 # Create unique tag if possible and tag the image
 imageTag=
 if [ ":${SEMVER_NUM}" != ":" ] ; then
-    tagTstamp=`echo "$imageCreated" | sed -e 's/-//g' -e 's/://g' -e 's/\..*Z/Z/' -e 's/T/./'`
-    imageTag="${SEMVER_NUM}_${tagTstamp}"
+    tagTstamp=`echo "$imageCreated" | sed -e 's/[-:]//g' -e 's/\..*Z/Z/'`
+    imageTag="${SEMVER_NUM}-${tagTstamp}${SEMVER_META}"
 
     docker tag ${imageId} ${repoName}:${imageTag}
 fi

@@ -2,46 +2,35 @@
 PROG="github-get"
 DESC="Submit a GET request to the GitHub API"
 USAGE1="${PROG} path"
-USAGE2="${PROG} -h|--help"
-SCRIPTDIR=$(cd `dirname $0`; pwd)
-. ${SCRIPTDIR}/init-path.rc
+HELP_DESC="
+Submit a GET request to the GitHub API.
+
+If the HTTP response status is 404, a \"Not found\" message is emitted and 1
+is returned. If the HTTP response status is another non-200 status, the
+entire response header and body are written to standard error and 1 is
+returned. If the HTTP response status is 200, the response header is
+discarded, the body is written to standard output, and 0 is returned.
+
+The \"path\" argument is 
+"
+HELP_ARGS="
+path
+    The target URL without the leading \"scheme\" (e.g.,\"/user/repos\").
+"
+HELP_ENV="
+GITHUB_URL
+   The base URL that the command-line argument will be appended to.
+   If not given, "https://api.github.com" is used.
+
+GH_TOKEN
+   A GitHub Personal API Token that will be used to authenticate.
+"
+SCRIPTDIR=`cd \`dirname $0\`; pwd`
+. ${SCRIPTDIR}/citools-basics.rc || exit 1
 
 GITHUB_URL="${GITHUB_URL:-https://api.github.com}"
 
 case $1 in
-    -h|--help)
-      cat <<EOF
-NAME
-    $PROG - $DESC
-
-SYNOPSIS
-    $USAGE1
-    $USAGE2
-
-DESCRIPTION
-    Submit a GET request to the GitHub API.
-
-    If the HTTP response status is 404, a "Not found" message is emitted and 1
-    is returned. If the HTTP response status is another non-200 status, the
-    entire response header and body are written to standard error and 1 is
-    returned. If the HTTP response status is 200, the response header is
-    discarded, the body is written to standard output, and 0 is returned.
-
-    The "path" argument is the URL without the leading "scheme" (e.g.,
-    "/user/repos".
-
-    If given a -h or --help argument, the script will print help text and quit.
-
-ENVIRONMENT
-    GITHUB_URL
-       The base URL that the command-line argument will be appended to.
-       If not given, "https://api.github.com" is used.
-
-    GH_TOKEN
-       A GitHub Personal API Token that will be used to authenticate.
-
-EOF
-          exit 0 ;;
     /*)
         URL_PATH="$@" ;;
     *)
@@ -49,10 +38,11 @@ EOF
 esac
 URL="${GITHUB_URL}${URL_PATH}"
 
+vecho "Requesting GET from URL ${URL}..."
 response=`curl -is -L \
      -H "Accept: application/vnd.github.v3+json" \
      -H "Authorization: token ${GH_TOKEN}" \
-     "${URL}"` || exit 1
+     "${URL}"`
 
 statusline=`echo "${response}" | head -1`
 case $statusline in
@@ -60,13 +50,13 @@ case $statusline in
         # This must be a non-release tag.
         echo "${PROG}: Not found ($URL_PATH)" >&2
         exit 1 ;;
-    *200*)
+    *2[0-9][0-9]*)
         # If the request succeeded, strip out the HTTP response header and
         # output the body
-        echo "${response}" | sed -n '/^{/,$p' ;;
+        echo "${response}" | sed -n -e '/^[[{].*/,$p' ;;
     *)
         echo "${PROG}: api GET request failed" >&2
-        cat ${response} >&2
+        echo "${response}" >&2
         exit 1 ;;
 esac
 

@@ -1,0 +1,80 @@
+#!/bin/sh
+PROG="github-get-release-by-name"
+DESC="Look up GitHub release info by release name"
+USAGE1="${PROG} [--repo=<repoowner_reponame>] 
+                               [--outfile=<outfile>] <release_name>"
+HELP_DESC="
+Use the GitHub API to look up a release by name. This requires getting
+a list of all releases for a repo and searching for a matching
+name.
+
+If the HTTP response status is 404, a \"Not found\" message is emitted and 1
+is returned. If the HTTP response status is another non-200 status, the
+entire response header and body are written to standard error and 1 is
+returned. If the HTTP response status is 200, the response header is
+discarded, the body is written to standard output, and 0 is returned.
+"
+HELP_OPTS="
+--outfile=<outfile>
+    If given, a file to write the result to. If not given, standard output
+    is used.
+--repo=<repoowner_reponame>
+    The repo owner and repo name, separated by \"/\". If not given, the
+    REPO environment variable is used.
+"
+HELP_ARGS="
+<release_name>
+    The name to search for.
+"
+HELP_ENV="
+GH_TOKEN
+   A GitHub Personal API Token that will be used to authenticate.
+
+REPO
+   The repo owner and repo name, separated by \"/\".
+"
+SCRIPTDIR=`cd \`dirname $0\`; pwd`
+. ${SCRIPTDIR}/citools-basics.rc || exit 1
+
+GITHUB_URL="${GITHUB_URL:-https://api.github.com}"
+
+OUTFILE=
+RELEASE_NAME=
+while [ $# != 0 ] ; do
+    case $1 in
+        --outfile=*)
+            OUTFILE=`expr "$1" : '--outfile=\(.*\)'` ;;
+        --repo=*)
+            REPO=`expr "$1" : '--repo=\(.*\)'` ;;
+        -*)
+            echo "${PROG}: unknown  option: $1" >&2
+            exit 1 ;;
+        *)
+            RELEASE_NAME="$1"
+            break ;;
+    esac
+    shift
+done
+if [ ":${REPO}" = ":" ] ; then
+    echo "${PROG}: --repo argument is required" >&2
+    exit 1
+fi
+if [ ":${RELEASE_NAME}" = ":" ] ; then
+    echo "${PROG}: release_name argument is required" >&2
+    exit 1
+fi
+
+SCRATCHDIR=/tmp/citools.$$
+trap "rm -rf ${SCRATCHDIR} ; exit 1" 0 1 2 13 15
+mkdir -p ${SCRATCHDIR} || exit 1
+
+github-get "/repos/${REPO}/releases" >${SCRATCHDIR}/releases.json || exit 1
+
+if [ ":${OUTFILE}" != ":" ] ; then
+    exec >${OUTFILE} || exit 1
+fi
+jq ".[] | select(.name==\"${RELEASE_NAME}\")" <${SCRATCHDIR}/releases.json
+
+rm -rf ${SCRATCHDIR}
+trap '' 0
+exit 0

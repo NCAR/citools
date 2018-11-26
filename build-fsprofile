@@ -1,0 +1,40 @@
+#!/bin/sh
+PROG=build-fsprofile
+DESC="Recursively collect relevant metadata, checksums"
+USAGE1="${PROG} [--git-hash] paths..."
+
+HELP_DESC="
+This script recursively visits all files under the indicated paths
+and prints out metadata that can be used to determine if the tree content
+has been modified. Specifically, it prints out the path, file mode, link
+count, owner, group, size, and, for regular files, a checksum and octet
+count.
+
+The script can be used, for example, to determine whether a software
+package update in a docker build has actually changed anything.
+"
+HELP_OPTS="
+--git-hash
+    Instead of writing information about each file, a single hash value
+    is written for all files using \"git hash-object\".
+"
+
+SCRIPTDIR=`cd \`dirname $0\`; pwd`
+. ${SCRIPTDIR}/citools-basics.rc || exit 1
+
+if [ ":$1" = ":--git-hash" ] ; then
+    OUTFILTER="git hash-object --stdin"
+    shift
+else
+    OUTFILTER="cat"
+fi
+find "$@" -print | sort | while read path ; do
+    set : `ls -dln ${path}`
+    if [ -f "${path}" ] ; then
+        sum=`sum <"${path}"`
+    else
+        sum=
+    fi
+    echo "$path $2 $3 $4 $5 $6 $sum"
+done | eval "${OUTFILTER}"
+

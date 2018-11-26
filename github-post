@@ -1,9 +1,9 @@
 #!/bin/sh
-PROG="github-patch"
-DESC="Submit a PATCH request to the GitHub API"
+PROG="github-post"
+DESC="Submit a POST request to the GitHub API"
 USAGE1="${PROG} path"
 HELP_DESC="
-Submit a PATCH request to the GitHub API. The body of the request is read
+Submit a POST request to the GitHub API. The body of the request is read
 from standard input.
 
 If the HTTP response status is 404, a \"Not found\" message is emitted and 1
@@ -39,7 +39,7 @@ URL="${GITHUB_URL}${URL_PATH}"
 
 payload=`cat`
 
-response=`curl -is -L -X PATCH \
+response=`curl -is -L -X POST \
      -H "Content-Type: application/json" \
      -H "Accept: application/vnd.github.v3+json" \
      -H "Authorization: token ${GH_TOKEN}" \

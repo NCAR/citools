@@ -1,116 +1,85 @@
 #!/bin/sh
 PROG=versions
 DESC="Version strings lister"
-VERSION=0.1.0
 USAGE1="${PROG} -l|--list"
 USAGE2="${PROG} -c|--current [-n|--no-metadata]"
 USAGE3="${PROG} -i|--inc [-f|--field=N|patch|minor|major]"
-USAGE4="${PROG} -h|--help"
-USAGE5="${PROG} --version"
-USAGE="Usage:
-    ${USAGE1}
-    ${USAGE2}
-    ${USAGE3}
-    ${USAGE4}
-    ${USAGE5}"
 
-# This script uses primitive but portable dialects of sh and awk
-PATH="/usr/local/bin:/usr/local/sbin:/bin:/sbin:/usr/bin:/usr/sbin"
-export PATH
-if test ":$1" = ":--help" ; then
-    cat <<EOF
-NAME
-    $PROG - $DESC
+HELP_DESC="
+This script is used to evaluate and manipulate multi-part version strings.
+It reads version strings from standard input, one per line. A typical
+use case is expected to involve piping the output of \"git tag --list\" to
+the script.
 
-SYNOPSIS
-    $USAGE1
-    $USAGE2
-    $USAGE3
-    $USAGE4
-    $USAGE5
+An input version string may optionally start with \"v\" or \"V\", which is
+ignored.
 
-DESCRIPTION
-    This script is used to evaluate and manipulate multi-part version strings.
-    It reads version strings from standard input, one per line. A typical
-    use case is expected to involve piping the output of "git tag --list" to
-    the script.
+Following the optional \"v\" or \"V\", the version string is assumed to
+consist of one or more dot-separated purely numeric components,
+followed by an optional \"pre-release version\" string, followed by an
+optional \"metadata\" string. Any input strings that do not conform to this
+format are silently ignored.
 
-    An input version string may optionally start with "v" or "V", which is
-    ignored.
+The leading numeric components represent a major version followed by
+progressively more minor versions.
 
-    Following the optional "v" or "V", the version string is assumed to
-    consist of one or more dot-separated purely numeric components,
-    followed by an optional "pre-release version" string, followed by an
-    optional "metadata" string. Any input strings that do not conform to this
-    format are silently ignored.
+The pre-release string, if present, starts with either the first
+non-numeric dot-separated component, the first non-numeric substring in a
+component that starts with digits, or the component following the first
+hyphen, whichever comes first. The pre-release string must consist of
+dot-separted components that contain only ASCII alphanumerics and hyphens.
 
-    The leading numeric components represent a major version followed by
-    progressively more minor versions.
+The metadata component, if present, must be separated from the
+preceeding components by a '+' character. This script does not place any
+restrictions on the content of the metadata component.
 
-    The pre-release string, if present, starts with either the first
-    non-numeric dot-separated component, the first non-numeric substring in a
-    component that starts with digits, or the component following the first
-    hyphen, whichever comes first. The pre-release string must consist of
-    dot-separted components that contain only ASCII alphanumerics and hyphens.
+Note that \"semantic version\" strings are consistent with this scheme,
+with the following additional restrictions: there is no leading \"v\" or \"V\";
+there are exactly three leading numeric components; the pre-release string
+always uses a leading hyphen separator; and the metadata component can
+consist only of dot-separted components that contain only ASCII
+alphanumerics and hyphens.
 
-    The metadata component, if present, must be separated from the
-    preceeding components by a '+' character. This script does not place any
-    restrictions on the content of the metadata component.
+Output consists of a set of \"normalized\" version strings written to
+standard output. These have the following format:
 
-    Note that "semantic version" strings are consistent with this scheme,
-    with the following additional restrictions: there is no leading "v" or "V";
-    there are exactly three leading numeric components; the pre-release string
-    always uses a leading hyphen separator; and the metadata component can
-    consist only of dot-separted components that contain only ASCII
-    alphanumerics and hyphens.
+    [v|V]<numvers>[-<prerelease>][+<metadata>]
 
-    Output consists of a set of "normalized" version strings written to
-    standard output. These have the following format:
+where [] indicates optional parts, <numvers> is a set of one or more dot-
+separated numeric components, and <prerelease> and <metadata> are
+pre-release and metadata strings as previously described. A leading \"v\" or
+\"V\" will be preserved.
+"
+HELP_OPTS="
+-c|--current
+    Find the current (latest) version string in the input. No more than
+    one version string will be output.
 
-        [v|V]<numvers>[-<prerelease>][+<metadata>]
-
-    where [] indicates optional parts, <numvers> is a set of one or more dot-
-    separated numeric components, and <prerelease> and <metadata> are
-    pre-release and metadata strings as previously described. A leading "v" or
-    "V" will be preserved.
-
-    The following command-line arguments are supported:
-
-    -c|--current
-        Find the current (latest) version string in the input. No more than
-        one version string will be output.
-
-    -f|--field=N|major|minor|patch
-        When used with -i|--inc, indicates which component of the version
-        string should be incremented. The value can be a zero-based integer
-        index of one of the predefined strings "major" (=0), "minor" (=1), or
-        "patch) (=2).
+-f|--field=N|major|minor|patch
+    When used with -i|--inc, indicates which component of the version
+    string should be incremented. The value can be a zero-based integer
+    index of one of the predefined strings \"major\" (=0), \"minor\" (=1), or
+    \"patch\") (=2).
         
-    -i|--inc
-        Find the latest version string in the input and increment either the
-        last leading numeric component, or the numeric component indicated by
-        the -f|--field argument. Following numeric fields are all set to 0, and
-        the prerelease and metadata fields will be empty. Exactly one version
-        string will be output; if no valid versions strings are read from
-        input, the "current" version is assumed to be "0.0.0".
+-i|--inc
+    Find the latest version string in the input and increment either the
+    last leading numeric component, or the numeric component indicated by
+    the -f|--field argument. Following numeric fields are all set to 0, and
+    the prerelease and metadata fields will be empty. Exactly one version
+    string will be output; if no valid versions strings are read from
+    input, the \"current\" version is assumed to be \"0.0.0\".
 
-    -l|--list
-        Validate the input version strings and sort them all from low to high.
-        The last string output will be the latest version string.
+-l|--list
+    Validate the input version strings and sort them all from low to high.
+    The last string output will be the latest version string.
 
-    -n|--no-metadata
-        When used with -c|--current, do not include the metadata part of the
-        version string. Note that if the version string is a valid "semantic
-        version" string; this will make the string compatible with docker tags.
-
-    -h|--help
-        Print this help text and exit.
-
-    --version
-        Print the version number of the script and exit.
-EOF
-    exit 0
-fi
+-n|--no-metadata
+    When used with -c|--current, do not include the metadata part of the
+    version string. Note that if the version string is a valid \"semantic
+    version\" string; this will make the string compatible with docker tags.
+"
+SCRIPTDIR=`cd \`dirname $0\`; pwd`
+. ${SCRIPTDIR}/citools-basics.rc || exit 1
 
 PROGDIR=`dirname "$0"`
 if ":${AWK}" = ":" ; then
@@ -152,9 +121,6 @@ while test $# -gt 0 ; do
         shift ;;
     --field=*)
         FIELD=`expr "X${arg}" : 'X--field=\(.*\)'` ;;
-    -h|--help)
-        $0 --help
-        exit 0 ;;
     -i|--inc)
         MODEARGS="${MODEARGS} ${arg}"
         MODE="${MODE}inc"
@@ -164,9 +130,6 @@ while test $# -gt 0 ; do
         MODE="${MODE}list" ;;
     -n|--no-metadata)
         META=n ;;
-    --version)
-        echo "${PROG} ${VERSION}"
-        exit 0 ;;
     *)
         echo "${PROG}: unrecognized argument: ${arg}" >&2
         echo "${USAGE}" >&2

@@ -3,21 +3,16 @@ PROG="install-jq"
 DESC="Install jq"
 USAGE1="${PROG} [dest_dir]"
 USAGE2="${PROG} -h|--help"
-SCRIPT_VERSION=0.0.1
 JQ_VERSION='1.5'
 BINDIR=/usr/local/bin
 
-HELP_TEXT="
-NAME
-    $PROG - $DESC
-
-SYNOPSIS
-    $USAGE1
-    $USAGE2
-
-DESCRIPTION
-    Install jq version ${JQ_VERSION}. The installation directory can be
-    provided as a command-line argument (default=$BINDIR).
+HELP_DESC="
+Install jq version ${JQ_VERSION}. The installation directory can be
+provided as a command-line argument (default=$BINDIR).
+"
+HELP_ARGS="
+dest_dir
+    If given, the directory in which to install the tools.
 "
 SCRIPTDIR=`cd \`dirname $0\`; pwd`
 . ${SCRIPTDIR}/citools-basics.rc || exit 1

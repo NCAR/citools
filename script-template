@@ -1,0 +1,28 @@
+#!/bin/sh
+PROG=
+DESC=""
+USAGE1="${PROG}"
+
+HELP_DESC="
+**DESCRIBE SCRIPT**
+"
+HELP_OPTS="
+--myopt
+    **DESCRIPT OPTION**
+"
+HELP_ARGS="
+myarg
+    **DESCRIPT NON_OPTION ARGUMENTS**
+"
+HELP_ENV="
+MYENV
+    **DESCRIBE ENVIRONMENT VARIABLES HERE**
+"
+HELP_FILES="
+myfile
+    **DESCRIBE FILES HERE**
+"
+
+SCRIPTDIR=`cd \`dirname $0\`; pwd`
+. ${SCRIPTDIR}/citools-basics.rc || exit 1
+

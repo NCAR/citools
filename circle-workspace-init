@@ -1,101 +1,187 @@
 #!/bin/sh
 PROG="circle-workspace-init"
 DESC="Initialize the workspace for a CircleCI workflow"
-USAGE1="${PROG} [workspace_root]"
-USAGE2="${PROG} -h|--help"
-USAGE3="${PROG} --version"
-SCRIPT_VERSION=0.0.1
+USAGE1="${PROG} [--root=<workspace_root>] [--bin=<workspace_bin>] \
+                          [--state=<workspace_state>] --initrc=<init_rc>"
 
-HELP_TEXT="
-NAME
-    $PROG - $DESC
+HELP_DESC="
+This script initializes the \"workspace\" at the start of a CircleCI
+workflow.
 
-SYNOPSIS
-    $USAGE1
-    $USAGE2
-    $USAGE3
+A CircleCI configuration should define a workspace root directory and create
+two directories under it: one for dynamically-installed software and one
+for workflow state. It should then install the \"citools\" scripts into
+the workspace and invoke this script:
 
-DESCRIPTION
-    This script initializes the \"workspace\" at the start of a CircleCI
-    workflow.
+  mkdir -p \${WORKSPACE}/bin \${WORKSPACE}/state
+  git clone --depth 1 git@github.com:NCAR/citools.git \${WORKSPACE}/bin
+  \${WORKSPACE}/bin/circle-workspace-init \\
+      --root=${WORKSPACE} --bin=bin --state=state \\
+      --init-rc=${WORKSPACE}/state/init.rc
 
-    A CircleCI configuration should define environment variable WORKSPACE
-    to point to the workspace root (e.g. \"\$HOME/workspace\"), and then run
-    the following commands at the start of each workflow to initialize the
-    workspace:
+Following these commands, the configuration should run a
+\"persist_to_workspace\" job step with the root set to the \$WORKSPACE
+directory and paths \"bin\" and \"state\":
 
-      mkdir -p \${WORKSPACE}/bin \${WORKSPACE}/state
-      git clone --depth 1 git@github.com:NCAR/citools.git \${WORKSPACE}/bin
-      \${WORKSPACE}/bin/circle-workspace-init
+  - persist_to_workspace:
+      root: workspace
+      paths:
+        - bin
+        - state
 
-    Following these commands, the configuration should run a
-    \"persist_to_workspace\" job step with the root set to the \$WORKSPACE
-    directory and paths \"bin\" and \"state\":
+In subsequent jobs that attach the workspace, \"run\" job steps in the
+workflow should begin with the following command:
 
-      - persist_to_workspace:
-          root: workspace
-          paths:
-            - bin
-            - state
+  . \${WORKSPACE}/state/init.rc
 
-    All subsequent \"run\" job steps in the workflow should begin with the
-    following command:
+The \"\${WORKSPACE}/state/init.rc\" file is written by $PROG.
+It contains environment variable definitions useful to subsequent
+jobsteps. The name of the file is stored in its own environment variable,
+INIT_RC; the definition of INIT_RC is actually included in init.rc.
+See circle-env for more information on the environment variables
+defined.
 
-      . \${WORKSPACE}/state/init.rc
+In addition to writing the \"init.rc\" file, $PROG
+installs the \"jq\" utility (and possibly other software) in
+\${WORKSPACE}/bin, and caches \"docker login\" commands.
+"
+HELP_OPTS="
+--root=<workspace_root>
+    The root directory of the workspace. The path can be absolute or
+    relative to \$CIRCLE_WORKING_DIRECTORY. The path will be stored in the
+    WORKSPACE environment variable in the <init_rc> file. If not given,
+    the WORKSPACE environment variable must be set.
 
-    The \"\${WORKSPACE}/state/init.rc\" file is written by $PROG.
-    It contains environment variable definitions useful to subsequent
-    jobsteps. The name of the file is stored in its own environment variable,
-    INIT_RC; the definition of INIT_RC is actually included in init.rc.
+--bin=<workspace_bin>
+    A directory in which dynamically-installed software should be
+    installed. If given, the path must be absolute or relative to
+    \$WORKSPACE. If absolute, it must be under \$WORKSPACE. If not given,
+    the LOCAL_BIN environment variable will be used if set, otherwise the
+    script's own directory is used. The path will be stored in the
+    LOCAL_BIN environment variable in the <init_rc> file.
 
-    In addition to writing the \"init.rc\" file, $PROG
-    installs the \"jq\" utility (and possibly other software) in
-    \${WORKSPACE}/bin, and caches \"docker login\" commands.
+--state=<workspace_state>
+    A directory in which workflow state will be stored. If given, the
+    path must be absolute or relative to \$WORKSPACE. If absolute, it
+    must be under \$WORKSPACE. If not given, the STATEDIR environment
+    variable will be used if set, otherwise \$WORKSPACE/state is
+    used. The path will be stored in the STATEDIR environment variable
+    in the <init_rc> file.
 
-    The workspace root directory name must be passed to the script, either
-    on the command line or via the WORKSPACE environment variable.
-
-    The script will write the value of \$INIT_RC to standard output before
-    a successful exit.
-
-    The following options are currently supported:
-
-    -h|--help
-        Print this help text and exit.
-
-    --version
-        Print the version number of the script and exit.
-
-    workspace_root
-        If given, the workspace root directory; this will override any value
-        assigned to the WORKSPACE environment variable.
-
-ENVIRONMENT
-    WORKSPACE
-        The root directory for the CircleCI workspace.
-
-    INIT_RC
-        The \".rc\" file that CircleCI job steps should source to initialize
-        run-time environment variables. If not given, the file name is
-        \$WORKSPACE/state/init.rc.
+--initrc=<init_rc>
+    A path of a file into which environment variable definitions will be
+    written. If given, the path must be absolute or relative to
+    \$WORKSPACE. If absolute, it must be under \$WORKSPACE. If not given,
+    the INIT_RC environment variable will be used if set; otherwise
+    \$WORKSPACE/state/init.rc is used.  The path will be stored in the
+    INIT_RC environment variable in the <init_rc> file.
 "
 SCRIPTDIR=`cd \`dirname $0\`; pwd`
 . ${SCRIPTDIR}/citools-basics.rc || exit 1
 
-WORKSPACE="${1:-${WORKSPACE}}"
-export WORKSPACE
+#
+# Collect and validate command-line arguments and defaults
+#
+root="${WORKSPACE}"
+initrc="${INIT_RC}"
+bin="${LOCAL_BIN}"
+state="${STATEDIR}"
+while [ $# != 0 ] ; do
+    case $1 in
+        --root=/*)
+            root=`expr "$1" : '--root=\(.*\)$'` ;;
+        --root=*)
+            root=${CIRCLE_WORKING_DIRECTORY}/`expr "$1" : '--root=\(.*\)$'` ;;
+        --bin=*)
+            bin=`expr "$1" : '--bin=\(.*\)$'` ;;
+        --state=*)
+            state=`expr "$1" : '--state=\(.*\)$'` ;;
+        --initrc=*)
+            initrc=`expr "$1" : '--initrc=\(.*\)$'` ;;
+    esac
+    shift
+done
 
-INIT_RC=`${SCRIPTDIR}/circle-env` || exit 1
-. ${INIT_RC} || exit 1
+# Normalize root dir
+if [ ":${root}" = ":" ] ; then
+    echo "${PROG}: --root is required" >&2
+    exit 1
+else
+    root=`cd ${root}; pwd`
+fi
+mkdir -p "${root}" || exit 1
 
-if [ ! -x "${SCRIPTDIR}/${DEPLOYMENT_FRAMEWORK}" ] ; then
-    echo "${PROG}: no script found for DEPLOYMENT_FRAMEWORK=${DEPLOYMENT_FRAMEWORK}" >&2
+# Make sure all other paths are set and absolute
+if [ ":${bin}" = ":" ] ; then
+    bin="${root}/bin"
+fi
+if [ ":${state}" = ":" ] ; then
+    state="${root}/state"
+fi
+if [ ":${initrc}" = ":" ] ; then
+    initrc="${state}/init.rc"
+fi
+for var in bin state initrc ; do
+    eval val=\"\$${var}\"
+    case $val in
+        /*) : ;;
+        *)  val="${root}/${val}"
+            eval ${var}=\""${val}"\" ;;
+    esac
+done
+mkdir -p "${bin}" "${state}" || exit 1
+
+# normalize all other paths
+bin=`cd ${bin}; pwd`
+state=`cd ${state}; pwd`
+initrc_parent=`dirname "${initrc}"`
+mkdir -p ${initrc_parent} || exit 1
+initrc_parent=`cd ${initrc_parent}; pwd` 
+initrc="${initrc_parent}/`basename ${initrc}`"
+
+# Make sure all paths are under root
+finally=:
+for var in bin state initrc ; do
+    eval val=\"\$${var}\"
+
+    case ${val} in
+        ${root}/*)
+            : ;;
+        *)
+            echo "${PROG}: --${var} path  must be under ${root}" >&2
+            finally="exit 1" ;;
+    esac
+done
+eval $finally
+
+WORKSPACE="${root}" export WORKSPACE
+LOCAL_BIN="${bin}"  export LOCAL_BIN
+STATEDIR="${state}" export STATEDIR
+INIT_RC="${initrc}" export INIT_RC
+for var in WORKSPACE LOCAL_BIN STATEDIR INIT_RC ; do
+    eval val=\"\$${var}\"
+    vecho "${var}=${val}"
+    export ${var}
+done
+
+${SCRIPTDIR}/circle-env "${INIT_RC}"
+. ${INIT_RC}
+
+if [ ! -x "${CDIMPL}" ] ; then
+    echo "${PROG}: no script found for CDIMPL=${CDIMPL}" >&2
     exit 1
 fi
 
-circle-install-tools || exit 1
+set -e
+circle-install-tools ${LOCAL_BIN}
+if [ ":${IMAGE_NAME}" != ":" ] ; then
+    circle-docker-login-init ${IMAGE_NAME}
+fi
 
-circle-docker-login-init
+${CDIMPL} init
 
-echo "${INIT_RC}"
+if truthy ${CITOOLS_VERBOSE} ; then
+    circle-debug-dump
+fi
+
 exit 0

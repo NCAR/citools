@@ -2,36 +2,14 @@
 PROG=circle-docker-login-init
 DESC="Retrieve and cache a \"docker login\" command"
 USAGE1="${PROG} remote_image_name"
-USAGE2="${PROG} -h|--help"
-USAGE3="${PROG} --version"
-SCRIPT_VERSION=0.0.1
 
-HELP_TEXT="
-NAME
-    $PROG - $DESC
-
-SYNOPSIS
-    $USAGE1
-    $USAGE2
-    $USAGE3
-
-DESCRIPTION
-    Log in to a docker registry and cache the login command.
+HELP_DESC="
+Log in to a docker registry and cache the login command.
 "
-SCRIPTDIR=`cd \`dirname $0\`; pwd`
-. ${SCRIPTDIR}/citools-basics.rc || exit 1
-
-HELP_TEXT="
-NAME
-    $PROG - $DESC
-
-SYNOPSIS
-    $USAGE1
-    $USAGE2
-
-DESCRIPTION
-    This script is an adaptor for the CICADA pipeline tools.
-
+HELP_ARGS="
+remote_image_name
+    The name of the remote image, with or without a tag or
+    digest specification.
 "
 SCRIPTDIR=`cd \`dirname $0\`; pwd`
 . ${SCRIPTDIR}/citools-basics.rc || exit 1
@@ -53,6 +31,7 @@ elif [ ":$registry" = "dockerhub" ] ; then
 fi
 login=`docker-get-login "$1" 2>/dev/null`
 if [ ":$login" != ":" ] ; then
-    echo "${variable}=\"${login}\"" >>${INIT_RC}
+    vecho "Appending to $INIT_RC: '${variable}=\"${login}\" export ${variable'"
+    echo "${variable}=\"${login}\" export ${variable}" >>${INIT_RC}
 fi
 exit 0

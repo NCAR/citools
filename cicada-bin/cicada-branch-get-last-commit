@@ -1,0 +1,50 @@
+#!/bin/sh
+PROG=cicada-branch-get-last-commit
+DESC="Get most recent file committed to branch"
+USAGE1="${PROG}"
+
+HELP_DESC="
+This script expects to be run from a CircleCI job triggered by the
+addition of an image metadata file to a CICADA \"deployment branch\".
+
+It finds the most recently committed image metadata file and writes the
+image tag and commit details to standard output.
+"
+SCRIPTDIR=`cd \`dirname $0\`; pwd`
+SCRIPTPARENT=`dirname ${SCRIPTDIR}`
+
+. ${SCRIPTPARENT}/citools-basics.rc || exit 1
+
+PATH="${SCRIPTPARENT}:${SCRIPTDIR}:$PATH" export PATH
+
+cd `git rev-parse --show-toplevel` || exit 1
+
+git rev-list HEAD \
+| while read release ; do
+    filename=`git diff-tree --no-commit-id --name-only -r "${release}"`
+    imagename=`expr "${filename}" : '\([0-9][0-9]*.[0-9][0-9]*.[0-9][0-9]*-[0-9][0-9]*T[0-9][0-9]*Z[-.a-zA-Z0-9]*\)'`
+    if [ ":${imagename}" != ":" ] ; then
+        # validate file
+        . ${imagename} || exit 1
+        valid=n
+        for var in REPO_OWNER REPO_NAME VERSION ; do
+            eval "val=\$${var}"
+            if [ ":${val}" = ":" ] ; then
+                echo "${PROG}: ${imagename}: variable ${var} not set" >&2
+                valid=y
+                break
+            fi
+        done
+        parse-semver "${VERSION}"
+        if [ $? != 0 ] ; then
+            valid=n
+        fi
+        if [ ${valid} = y ] ; then
+            comminfo=`git log -1 --pretty=format:"by %ce at %cd" "${release}"`
+            echo "${imagename} ${comminfo}"
+            exit 0
+        fi
+    fi
+done
+echo "${PROG}: no valid image metadata file found" >&2
+exit 1

@@ -1,0 +1,5 @@
+:
+if [ ":${STARTBRANCH}" != ""${CICADA_BRANCH_LOGS}" ] ; then
+    git checkout "${STARTBRANCH}" || exit 1
+    trap '' 0
+fi

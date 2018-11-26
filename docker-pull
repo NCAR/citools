@@ -1,0 +1,30 @@
+#!/bin/sh
+PROG=docker-pull
+DESC="Pull a docker image after authentication as necessary"
+USAGE1="${PROG} remote_image_ref"
+
+HELP_DESC="
+This script is a front-end for \"docker login\" and \"docker pull\".
+"
+HELP_ARGS="
+remote_image_ref
+    The image to pull.
+"
+SCRIPTDIR=`cd \`dirname $0\`; pwd`
+. ${SCRIPTDIR}/citools-basics.rc || exit 1
+
+REMOTE_IMAGE="$1"
+if [ ":${REMOTE_IMAGE}" = ":" ] ; then
+    echo "${PROG}: remote image name is required" >&2
+    exit 1
+fi
+
+docker logout
+eval `docker-get-login "${REMOTE_IMAGE}"` || exit 1
+
+docker pull "${REMOTE_IMAGE}" || exit 1
+
+exit 0
+
+
+

@@ -1,0 +1,106 @@
+#!/bin/sh
+PROG="circle-deploy"
+DESC="Tag and push a docker image and notify the CD implementor"
+USAGE1="${PROG}"
+
+HELP_DESC="
+This script pulls the target docker image from its registry, tags it,
+pushes the tagged image back, and registers the deployment with the
+CD implementor.
+
+Given a semantic version tag in \$CIRCLE_TAG with fields <major>, <minor>,
+and <patch>, the following remote tags will be applied:
+
+    <major>.<minor>.<patch>\$CIRCLE_TAG_META
+    latest
+    \$DEPLOY_ENV
+
+In addition, if \$CIRCLE_TAG_PRERELEASE is empty (signifying a production
+deployment), the following additional tags will also be applied:
+    <major>.<minor>.<patch> (if \$CIRCLE_TAG_META is not empty)
+    <major>.<minor>
+    <major>
+"
+HELP_ENV="
+CIRCLE_PROJECT_REPONAME
+    The name of the project repository. Set by CircleCI.
+
+CIRCLE_TAG_PRERELEASE
+    If CIRCLE_TAG environment variable is set and is a valid semantic
+    version string with a prerelease component, the prerelease component
+    (with its leading \"-\").
+
+CIRCLE_TAG_META
+    If CIRCLE_TAG environment variable is set and is a valid semantic
+    version string with a metadata component, the metadata component
+    (with its leading \"+\").
+
+DEPLOY_ENV
+    The deployment environment.
+
+IMAGE_NAME
+    The tag-less name of the target image in its docker registry.
+
+STATEDIR
+    The location of the state directory in the workspace.
+"
+HELP_FILES="
+${STATEDIR}/image-meta
+    A file used to cache the image metadata once it is retrieved from
+    CICADA.
+"
+SCRIPTDIR=`cd \`dirname $0\`; pwd`
+. ${SCRIPTDIR}/citools-basics.rc || exit 1
+
+if [ ":${CITOOLS_CIRCLE_ENV}" != ":true" ] ; then
+    . "${INIT_RC}" || exit 1
+fi
+# Verify all needed environment variables are set
+circle-env || exit 1
+
+if [ $CIRCLE_TAG_IS_SEMVER = false ] ; then
+    echo "${PROG}: \$CIRCLE_TAG must be a semantic version string" >&2
+    exit 1
+fi
+if [ ":${IMAGE_NAME}" = ":" ] ; then
+    echo "${PROG}: IMAGE_NAME environment variable must be set"
+    exit 1
+fi
+
+${CDIMPL} get-image-metadata "${STATEDIR}/image-meta"
+if [ ! -s "${STATEDIR}/image-meta" ] ; then
+    exit 1
+fi
+. "${STATEDIR}/image-meta" || exit 1
+
+vecho "IMAGE_TAG=${IMAGE_TAG}"
+
+set : "$@" \
+    ${CIRCLE_TAG_NUM}${CIRCLE_TAG_META} \
+    latest \
+    ${DEPLOY_ENV
+
+if [ ":${CIRCLE_TAG_PRERELEASE}" = ":" ] ; then
+    major_minor=`expr "${CIRCLE_TAG_NUM}" : '\([0-9][0-9]*\.[0-9][0-9]*\)\..*'`
+    major=`expr "${CIRCLE_TAG_NUM}" : '\([0-9][0-9]*\)\..*'`
+    set "$@" \
+      ${CIRCLE_TAG_NUM} \
+      ${major_minor} \
+      ${major}
+fi
+shift
+TAGS=`echo $@ | sort -u`
+
+vecho "TAGS: ${TAGS}"
+
+vecho "Running docker-pull ${IMAGE_NAME}:${IMAGE_TAG}"
+docker-pull ${IMAGE_NAME}:${IMAGE_TAG} || exit 1
+
+vecho "Running docker-tag-push ${IMAGE_NAME}:${IMAGE_TAG} ${IMAGE_NAME} \${TAGS}"
+docker-tag-push ${IMAGE_NAME}:${IMAGE_TAG} ${IMAGE_NAME} ${TAGS} || exit 1
+
+vecho "Running"
+cicada-log --write --branch=${CIRCLE_PROJECT_REPONAME}-${CIRCLE_TAG_ENV} \
+           --image="${IMAGE_TAG}" --type=deployed || exit 1
+
+exit 0

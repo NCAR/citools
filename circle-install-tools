@@ -3,25 +3,19 @@ PROG="circle-install-tools"
 DESC="Install miscellaneous tools for a CircleCI workflow"
 USAGE1="${PROG} [bindir]"
 USAGE2="${PROG} -h|--help"
-SCRIPT_VERSION=0.0.1
 
 BINDIR=/usr/local/bin
-HELP_TEXT="
-NAME
-    $PROG - $DESC
-
-SYNOPSIS
-    $USAGE1
-    $USAGE2
-
-DESCRIPTION
-    Install miscellaneous tools that might be needed in CircleCI job steps.
-    The installation directory can be provided as a command-line argument
-    (default=$BINDIR).
+HELP_DESC="
+Install miscellaneous tools that might be needed in CircleCI job steps.
+The installation directory can be provided as a command-line argument
+(default=$BINDIR).
 "
 SCRIPTDIR=`cd \`dirname $0\`; pwd`
 . ${SCRIPTDIR}/citools-basics.rc || exit 1
 
+if [ ":${CITOOLS_CIRCLE_ENV}" != ":true" ] ; then
+    . "${INIT_RC}" || exit 1
+fi
 # Verify all needed environment variables are set
 circle-env || exit 1
 
@@ -31,7 +25,7 @@ if [ ":$1" != ":" ] ; then
     BINDIR=`pwd` 
 fi
 
-echo "Installing jq..."
+vecho "Installing jq..."
 install-jq "${BINDIR}"
 
 need_AWS=n
@@ -43,7 +37,7 @@ for envvar in AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY AWS_SESSION_TOKEN ; do
     fi
 done
 if [ $need_AWS = y ] ; then
-    echo "Installing AWS cli..."
+    vecho "Installing AWS cli..."
     install-aws-cli "${BINDIR}"
     cd /tmp
     curl "https://s3.amazonaws.com/aws-cli/awscli-bundle.zip" -o "awscli-bundle.zip"

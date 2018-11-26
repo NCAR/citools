@@ -1,0 +1,128 @@
+version: 2.1
+executors:
+  generic-executor:
+    docker:
+      - image: circleci/php:7.2-cli
+    working_directory: ~/project
+    environment:
+      IMAGE_NAME: "gwilliam0ucar/test"
+      WORKSPACE: "/tmp/workspace"
+      INIT_RC: "/tmp/workspace/state/init.rc"
+      CITOOLS_VERBOSE: "true"
+      CDIMPL: "cicada"
+
+jobs:
+  initialize:
+    executor: generic-executor
+    steps:
+      - checkout
+
+      - run:
+          name: "Initialize workspace"
+          command: |
+            mkdir -p ${WORKSPACE}/bin ${WORKSPACE}/state
+            git clone --branch ${CITOOLS_TAG:-master} --depth 1 \
+              git@github.com:NCAR/citools.git ${WORKSPACE}/bin
+            ${WORKSPACE}/bin/circle-workspace-init \
+              --root=${WORKSPACE} --bin=bin --state=state --initrc=${INIT_RC}
+
+      - persist_to_workspace:
+          root: /tmp/workspace
+          paths:
+            - bin
+            - state
+
+  build-prototype:
+    executor: generic-executor
+    steps:
+      - setup_remote_docker
+
+      - run:
+          name: "Build"
+          command: |
+            docker build .
+
+  find-or-build-deployable:
+    executor: generic-executor
+    steps:
+      - attach_workspace:
+          at: /tmp/workspace
+
+      - setup_remote_docker
+
+      - run:
+          name: "Build and push image, register image metadata"
+          command: |
+            . ${INIT_RC}
+            circle-build-push .
+
+      - persist_to_workspace:
+          root: /tmp/workspace
+          paths:
+            - state
+
+  deploy:
+    executor: generic-executor
+    steps:
+      - attach_workspace:
+          at: /tmp/workspace
+
+      - setup_remote_docker
+
+      - run:
+          name: "Check approveal, then deploy"
+          command: |
+            . ${INIT_RC}
+            ${CDIMPL} request-deployment-approval && circle-deploy
+            if [ "${TRIGGER_TYPE}" = "automatic" ]
+                exit 0
+            else
+                exit 1
+            fi
+
+workflows:
+  version: 2
+  build:
+    jobs:
+      - initialize:
+          filters:
+            branches:
+              only: /.*/
+            tags:
+              only: /^\d+\.\d+\.\d+.*$/
+    # - analyze-source
+    # Do static code analysis, etc. Parallelizable.
+    #     filters:
+    #       branches:
+    #         only: /.*/
+      - build-prototype:
+          filters:
+            branches:
+              only: /.*/
+      - find-or-build-deployable:
+          requires:
+            - initialize
+          filters:
+            branches:
+              ignore: /.*/
+            tags:
+              only: /^\d+\.\d+\.\d+.*$/
+    # - analyze-image
+    # Do security scanning, automated integration testing. Parallelizable.
+    #     requires:
+    #       - find-or-build-deployable
+    #     filters:
+    #       branches:
+    #         ignore: /.*/
+    #       tags:
+    #         only: /^\d+\.\d+\.\d+.*/
+      - deploy:
+          requires:
+            - find-or-build-deployable
+          filters:
+            branches:
+              ignore: /.*/
+            tags:
+              only: /^\d+\.\d+\.\d+.*/
+
+

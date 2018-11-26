@@ -1,0 +1,7 @@
+:
+# Manifest CICADA constants
+CICADA_REPO=gwilliam-ucar-edu/CICADA
+CICADA_BRANCH_CONFIG=master
+CICADA_BRANCH_LOGS=cicadalogs
+
+

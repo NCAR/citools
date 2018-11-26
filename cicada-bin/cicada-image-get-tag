@@ -1,0 +1,66 @@
+#!/bin/sh
+PROG=cicada-image-get-tag
+DESC="Retrieve the image tag or asset id for a release tag"
+USAGE1="${PROG} [--asset-id]"
+
+HELP_DESC="
+Image metadata files are stored as \"assets\" of GitHub repo \"releases\".
+The name of a metadata file asset is the image's IMAGE_TAG metadata
+attribute. The image tag has the form
+
+   <semver_num>-<timestamp><semver_meta>
+
+where <semver_num> is the \"major.minor.patch\" component of the semantic
+version, and <timestamp> is the UTC creation timestamp for the image, and
+<semver_meta> is the metadata portion of the semantic version (with the
+leading \"+\" replaced with \".\").
+
+The script retrieves image tag for the indicated release and writes it
+to standard output.
+"
+HELP_OPTS="
+--asset-id
+    If given the asset id for the image metadata object is written, rather
+    than the image tag.
+"
+SCRIPTDIR=`cd \`dirname $0\`; pwd`
+SCRIPTPARENT=`dirname ${SCRIPTDIR}`
+. ${SCRIPTPARENT}/citools-basics.rc || exit 1
+PATH="${SCRIPTPARENT}:${SCRIPTDIR}:$PATH" export PATH
+
+cicada-client-init --check || exit 1
+
+if [ ":$1" = ":--asset-id" ] ; then
+    MODE=ASSET_ID
+    ASSET_ID=`cat ${RELEASE_OBJ_ASSET_ID_CACHE} 2>/dev/null`
+    val="${ASSET_ID}"
+else
+    MODE=IMAGE_TAG
+    IMAGE_TAG=`cat ${IMAGE_TAG_CACHE} 2>/dev/null`
+    val="${IMAGE_TAG}"
+fi
+if [ ":${val}" = ":" ] ; then
+
+    # Pull out id and name from asset list, reverse sort by name
+    jq '.[]|{name,id}|tostring' <${RELEASE_OBJ_ASSET_LIST} \
+    | tr -d '\\{}"' | sed -e 's/name://' -e 's/,id:/ /' | sort -r \
+    | while read name id ; do
+        # Find matching image tag
+        semver_num=`parse-semver -n "${name}"`
+        if [ ":${semver_num}" = ":${SEMVER_NUM}" ] ; then
+            semver_meta=`expr "${name}" : '[^Z]*Z\(\..*\)' | sed -e 's/^\./+/'`
+            if [ ":${semver_meta}" = ":${SEMVER_META}" ] ; then
+                vecho "Found matching asset ${name}, id=${id}"
+                IMAGE_TAG="${name}"
+                ASSET_ID="${id}"
+                echo "${IMAGE_TAG}" >"${IMAGE_TAG_CACHE}"
+                echo "${ASSET_ID}" >${RELEASE_OBJ_ASSET_ID_CACHE}
+                eval val=\"\$${MODE}\"
+                break
+            fi
+        fi
+    done
+fi
+
+echo "${val}"
+exit 0

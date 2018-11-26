@@ -1,0 +1,85 @@
+#!/bin/sh
+PROG=citools-docgen
+DESC="Generate citools documentation"
+USAGE1="${PROG} [--wikidir=<dir>] docdir"
+
+HELP_DESC="
+This script creates documentation pages in the GitHub citools wiki. It
+creates man-like text documents by invoking each script with its --help
+option, and a markdown index file with links to the text documents.
+"
+HELP_OPTS="
+--wikidir=<dir>
+    The name of the directory in the wiki in which the documents will be
+    installed. This is used in constructing the links to the documents in
+    the index file. If not given, the last component of the docdir argument
+    is used.
+"
+HELP_ARGS="
+docdir
+    The output directory.
+"
+HELP_FILES="
+index.md
+    The index file name.
+
+<scriptname>.txt
+    The help file for a script.
+"
+
+SCRIPTDIR=`cd \`dirname $0\`; pwd`
+. ${SCRIPTDIR}/citools-basics.rc || exit 1
+
+WIKI_URL="https://github.com/NCAR/citools.wiki.git"
+
+WIKIDIR=
+case $1 in
+    --wikidir=*)
+        WIKIDIR=`expr "$2" : '--wikidir=\(.*\)$'`
+        shift ; shift ;;
+esac
+DOCDIR="$1"
+if [ ":$DOCDIR" = ":" ] ; then
+    echo "${PROG}: directory argument required" >&2
+    exit 1
+fi
+if [ ! -d "${DOCDIR}" ] ; then
+    echo "${PROG}: $DOCDIR: not a directory" >&2
+    exit 1
+fi
+if [ ":$WIKIDIR" = ":" ] ; then
+    WIKIDIR=`basename "${DOCDIR}"`
+fi
+
+TMPFILE="${DOCDIR}/.tmp"
+INDEXFILE="${DOCDIR}/index.md"
+:>${INDEXFILE}.tmp
+
+REPO_ROOT=`git rev-parse --show-toplevel` || exit 1
+cd "${REPO_ROOT}" || exit 1
+
+trap "rm -rf ${TMPFILE} ${INDEXFILE}.tmp ; exit 1" 0 1 2 13 15
+
+set -vx
+find . -type f ! -name '*~' -perm -0005 -exec grep -l '^PROG=' {} \; \
+| while read file ; do
+    relpath=`expr "${file}" : '\./\(.*\)$'`
+    descline=`sed -n -e '/^DESC=/p' ${file}`
+    eval ${descline}
+    ${file} --help >${TMPFILE}
+    if [ -s "${TMPFILE}" ] ; then
+        dir=`dirname "${DOCDIR}/${file}"`
+        mkdir -p "${dir}"
+        mv "${TMPFILE}" "${DOCDIR}/${file}.txt"
+        echo "- [${relpath}](${WIKI_URL}/${WIKIDIR}/${relpath}.txt) - ${DESC}" >>${INDEXFILE}.tmp
+    fi
+done
+
+sort ${INDEXFILE}.tmp >${INDEXFILE}
+rm -f ${INDEXFILE}.tmp
+
+trap "" 0
+exit 0
+
+
+

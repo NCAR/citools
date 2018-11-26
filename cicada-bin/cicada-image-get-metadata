@@ -1,0 +1,64 @@
+#!/bin/sh
+PROG=cicada-image-get-metadata
+DESC="Retrieve an image metadata file"
+USAGE1="${PROG} [--attr=<attrname>] <file>"
+
+HELP_DESC="
+Image metadata files are stored as \"assets\" of GitHub repo \"releases\".
+The name of a metadata file asset is the image's IMAGE_TAG metadata
+attribute.
+
+This script retrieves the image metadata asset from the current release.
+"
+HELP_OPTS="
+--attr=<attrname>
+    If given, the name of a specific metadata attribute; the value of the
+    attribute is written to standard output.
+"
+HELP_ARGS="
+<file>
+    The name of a local file where the metadata file should be copied. If
+    not given, the metadata file is landed in the \$IMAGE_METADATA_CACHE
+    file.
+"
+SCRIPTDIR=`cd \`dirname $0\`; pwd`
+SCRIPTPARENT=`dirname ${SCRIPTDIR}`
+. ${SCRIPTPARENT}/citools-basics.rc || exit 1
+PATH="${SCRIPTPARENT}:${SCRIPTDIR}:$PATH" export PATH
+
+cicada-client-init --check || exit 1
+
+ATTR=
+case $1 in
+    --attr=*)
+        ATTR=`expr "$1" : '--attr=\(.*\)'`
+        shift ;;
+esac
+
+TARGET_FILE="$1"
+
+if [ ! -s "${IMAGE_METADATA_OBJ}" ] ; then
+    ASSET_ID=`cicada-image-get-tag --asset-id`
+    if [ ":${ASSET_ID}" != ":" ] ; then
+        vecho "Running github-get /repos/${REPO}/releases/assets/${ASSET_ID}"
+        github-get /repos/${REPO}/releases/assets/${ASSET_ID} >${IMAGE_METADATA_CACHE}
+        if [ $? != 0 ] ; then
+            cat ${IMAGE_METADATA_CACHE} >&2
+            echo "${PROG}: unable to retrieve asset ${ASSET_ID} for ${RELEASE_TAG}" >&2
+            exit 1
+        fi
+    fi
+fi
+
+if [ ":${TARGET_FILE}" != ":" ] ; 
+    cp ${IMAGE_METADATA_CACHE} "${TARGET_FILE}"
+fi
+if [ ":${ATTR}" != ":" ] ; then
+    . ${IMAGE_METADATA_CACHE}
+    eval val=\"\$${ATTR}\"
+    echo "${val}"
+fi
+exit 0
+
+
+

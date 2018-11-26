@@ -10,7 +10,9 @@ easy and consistent.
 
 All scripts must support "-h" and "--help" command-line flags for displaying
 help, and all scripts should support a "--version" command-line flag for
-displaying the version of the script.
+displaying the version of the script. Scripts which support a "verbose"
+mode should enable it if the CITOOLS_VERBOSE environment variable is set and
+not empty.
 
 ## The Scripts
 
@@ -22,10 +24,54 @@ since it was built. Specifically, it checks whether the image identified
 by the `base.tag` label is still the same as the image identified by the
 `base.digest` label. This can be used to automate image rebuilds.
 
-### cicada, cicada-*command*
+### cicada-*command*
 
-Scripts supporting the CICADA deployment framework. Refer to the CICADA
-GitHub repo and the individual scripts for more information.
+Scripts supporting the CICADA deployment framework, which combines featires of
+GitHub and CircleCI to automate building and deploying docker continers. Refer
+to the CICADA GitHub repo for more information.
+
+The following scripts are meant to be run from the CircleCI configuration of
+a managed project:
+<dl>
+  <dt>cicada-init</dt>
+  <dd>
+    Initialize the CircleCI workspace for CICADA.
+  </dd>
+  <dt>cicada-build-push</dt>
+  <dd>
+    Ensure that a docker image for the current git release exists in a target
+    registry; build and push the image if it does not.
+  </dd>
+  <dt>cicada-verify-approval</dt>
+  <dd>
+    Verify that the target docker image has been authorized for deployment to
+    the indicated environment.
+  </dd>
+  <dt>cicada-deploy</dt>
+  <dd>
+    Pull, tag, and push the target docker image to the indicated environment.
+  </dd>
+</dl>
+
+The following scripts are lower-level support scripts:
+<dl>
+  <dt>cicada-image-tag</dt>
+  <dd>
+    Handle uploading and listing GitHub "release assets", which map release
+    tags to images.
+  </dd>
+  <dt>cicada-log</dt>
+  <dd>
+    Read/write CICADA logs on the CICADA master branch.
+  </dd>
+</dl>
+#### 
+
+#### cicada-build-push
+
+#### cicada-trigger-deployment
+Ensure that a docker image for the current git release exists in a target
+registry; build and push the image if it does not.
 
 ### circle-docker-login-init
 
@@ -59,6 +105,12 @@ Dump out all environment variables, but try to hide sensitive values.
 
 Initializes the "workspace" at the start of a CircleCI workflow. This calls
 `circle-env`, `circle-install-tools`, and `circle-docker-login-init`.
+
+### deployment-env
+
+Return information about deployment environment names. The script
+defines default deployment environment names, but these can be
+overridden via environment variables.
 
 ### docker-build
 
@@ -118,12 +170,6 @@ Submit a GET request to GitHub using its API.
 
 Submit a PATCH request to GitHub using its API.
 
-### github-upload-release-asset
-
-This script uploads a file to github as a "release asset" of a given
-repository. It requires that the `GH_TOKEN` environment variable be set to a
-Personal API Token that has full repository access.
-
 ### parse-semver
 
 This script parses a given supposed semantic version string and writes
@@ -140,6 +186,10 @@ recent one, or increments a component number in a valid version string.
 Versions strings are read from standard input, and strings that do not look
 like versions strings are ignored. One possible use is to pipe `git tag list`
 into the script to find the latest version tag.
+
+## Tips for Script Writers
+
+Refer to the `script-template` file to see how scripts should start.
 
 
 

@@ -1,0 +1,20 @@
+#!/bin/sh
+PROG="vecho"
+DESC="Verbose-mode echo to stderr"
+USAGE1="${PROG} args..."
+
+HELP_DESC="
+If the CITOOLS_VERBOSE environment variable is set and not empty,
+echo all command-line arguments to standard error.
+"
+HELP_ENV="
+CITOOLS_VERBOSE
+   Indicates whether verbose mode is enabled.
+"
+SCRIPTDIR=`cd \`dirname $0\`; pwd`
+. ${SCRIPTDIR}/citools-basics.rc || exit 1
+
+if truthy "${CITOOLS_VERBOSE}" ; then
+    echo "$@" >&2
+fi
+exit 0

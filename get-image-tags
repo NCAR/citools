@@ -1,0 +1,21 @@
+#!/bin/sh
+PROG=get-image-tags
+DESC="Retrieve a list of all known tags for a given"
+#set -vx
+REPO="$1"
+if [ ":${REPO}" = ":" ] ; then
+    echo "Repo name argument is required" >&2
+    exit 1
+fi
+for reqvar in DOCKERHUB_USERNAME DOCKERHUB_PASSWORD ; do
+    eval val=\"\${$reqvar}\"
+    if [ ":${val}" = ":" ] ; then
+        echo "$reqvar environment variable must be set" >&2
+        exit 1
+    fi
+done
+
+# get token to be able to talk to Docker Hub
+TOKEN=`curl -s -H "Content-Type: application/json" -X POST -d '{"username": "'${DOCKERHUB_USERNAME}'", "password": "'${DOCKERHUB_PASSWORD}'"}' https://hub.docker.com/v2/users/login/ | jq -r .token`
+
+curl -s -H "Authorization: JWT ${TOKEN}" https://hub.docker.com/v2/repositories/${REPO}/tags/?page_size=100 | jq -r '.results|.[]|.name'

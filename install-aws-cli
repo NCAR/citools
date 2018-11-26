@@ -2,21 +2,15 @@
 PROG="install-aws-cli"
 DESC="Install the AWS CLI"
 USAGE1="${PROG} [dest_dir]"
-USAGE2="${PROG} -h|--help"
-SCRIPT_VERSION=0.0.1
 
 BINDIR=/usr/local/bin
-HELP_TEXT="
-NAME
-    $PROG - $DESC
-
-SYNOPSIS
-    $USAGE1
-    $USAGE2
-
-DESCRIPTION
-    Install the AWS Command Line Interface. The installation directory can
-    be provided as a command-line argument (default=$BINDIR).
+HELP_DESC="
+Install the AWS Command Line Interface. The installation directory can
+be provided as a command-line argument (default=$BINDIR).
+"
+HELP_ARGS="
+dest_dir
+    If given, the directory in which to install the tools.
 "
 SCRIPTDIR=`cd \`dirname $0\`; pwd`
 . ${SCRIPTDIR}/citools-basics.rc || exit 1

@@ -1,0 +1,50 @@
+#!/bin/sh
+PROG=cicada-image-register
+DESC="Register image metadata with CICADA"
+USAGE1="${PROG} image_metadata_file"
+
+HELP_DESC="
+Image metadata files are stored as \"assets\" of GitHub repo \"releases\".
+The name of a metadata file asset is the image's IMAGE_TAG metadata
+attribute.
+
+This script uploads the given image metadata file as an asset to the
+appropriate release object in the target project's GitHub repo.
+"
+SCRIPTDIR=`cd \`dirname $0\`; pwd`
+SCRIPTPARENT=`dirname ${SCRIPTDIR}`
+. ${SCRIPTPARENT}/citools-basics.rc || exit 1
+PATH="${SCRIPTPARENT}:${SCRIPTDIR}:$PATH" export PATH
+
+cicada-client-init --check || exit 1
+
+IMAGE_METADATA="$1"
+if [ ":${IMAGE_METADATA}" = ":" ] ; then
+    if [ ! -f "${IMAGE_METADATA}" ] ; then
+        echo "${PROG}: ${IMAGE_METADATA}: no such file" >&2
+        exit 1
+    fi
+fi
+vecho "Registering \$IMAGE_METADATA..."
+
+eval `grep '^IMAGE_TAG=' ${IMAGE_METADATA}`
+if [ ":${IMAGE_TAG}" = ":" ] ; then
+    echo "${PROG}: Cannot determine image tag" >&2
+    exit 1
+fi
+
+POST_ASSET_URL="/repos/$REPO_OWNER/$REPO_NAME/releases"
+GITHUB_URL="https://uploads.github.com" export GITHUB_URL
+POSTPATH="${POST_ASSET_URL}/${RELEASE_ID}/assets?name=${IMAGE_TAG}"
+
+vecho "Running github-post ${POSTPATH} <${IMAGE_METADATA}..."
+resp=`github-post ${POSTPATH} <${IMAGE_METADATA}` || exit 1
+echo "${resp}" | jq -r .id >${RELEASE_OBJ_ASSET_ID_CACHE}
+
+vecho "Updating ${IMAGE_TAG_CACHE}: ${IMAGE_TAG}"
+echo "${IMAGE_TAG}" >"${IMAGE_TAG_CACHE}"
+
+vecho "Updating ${IMAGE_METADATA_CACHE}"
+cp ${IMAGE_METADATA} ${IMAGE_METADATA_CACHE}
+    
+exit 0

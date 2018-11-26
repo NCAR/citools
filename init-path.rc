@@ -1,0 +1,14 @@
+:
+PATH="/usr/local/bin:/usr/local/sbin:/bin:/sbin:/usr/bin:/usr/sbin"
+if [ ":${SCRIPTDIR}" = ":" ] ; then
+    SCRIPTDIR=$(cd `dirname $0`; pwd)
+    if [ ! -f "${SCRIPTDIR}/initpath.rc" ] ; then
+        echo "ERROR: cannot determine location of citools scripts" >&2
+    fi
+fi
+if [ ":${SCRIPTDIR}" != ":" ] ; then
+    PATH="${SCRIPTDIR}:${PATH}"
+fi
+export SCRIPTDIR PATH
+
+

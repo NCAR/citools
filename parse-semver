@@ -2,84 +2,44 @@
 PROG="parse-semver"
 DESC="Parse semantic version strings"
 USAGE1="${PROG} [-n] [-p] [-m] [-i] version_str"
-USAGE2="${PROG} -h|--help"
-USAGE3="${PROG} --version"
-SCRIPT_VERSION=0.0.1
 
-HELP_TEXT="
-NAME
-    $PROG - $DESC
+HELP_DESC="
+This script parses a given supposed semantic version string and writes
+one or more of the components to standard output. If the input string is
+not a valid semantic version string, nothing is written and 1 is returned.
+If it is a valid semantic version string, 0 is returned.
 
-SYNOPSIS
-    $USAGE1
-    $USAGE2
-
-DESCRIPTION
-    This script parses a given supposed semantic version string and writes
-    one or more of the components to standard output. If the input string is
-    not a valid semantic version string, nothing is written and 1 is returned.
-    If it is a valid semantic version string, 0 is returned.
-
-    Note that a leading \"v\" or \"V\" in the input string is allowed, but
-    ignored.
-
-    The following arguments are supported:
-
-    -n
-        Print the numeric component (major.minor.patch).
-
-    -p
-        Print the prerelease component, with its leading \"-\".
-
-    -m
-        Print the metadata component, with its leading \"+\".
-
-    -e
-        Print the deployment environment associated with the prerelease
-        component; this is normally the prerelease component without its
-        leading \"-\". See PRERELEASE_ENVIRONMENTS and PRODUCTION_ENVIRONMENT
-        under ENVIRONMENTS belpw.
-
-    -i
-        Print the input string (if it is valid).
-
-    -h|--help
-        Print help text and quit.
-
-    When more than one of the -n, -p, -m options are given, the components
-    are printed consecutively with no intervening spaces. For example,
-    \"-np\" would cause \"1.0.0-beta+build2\" to be transformed to
-    \"1.0.0-beta\".
-
-    If -i is given along with -n, -p, or -m, its value is always written
-    before the other components and separated from them by a space.
-
-    If -e is given along with other options, its value is always written
-    last, and separated from them by a space.
-
-ENVIRONMENT
-    PRERELEASE_ENVIRONMENTS
-        An ordered list of supported prerelease deployment environments. If
-        defined, the -e option will verify that the prerelease component is one
-        of these values if it is set. If this environment variable is not
-        defined, -e will do no special validation.
-
-    PRODUCTION_ENVIRONMENT
-        The name of the non-prerelease deployment environment. If defined,
-        the -e option will return its value if there is no prerelease
-        component; otherwise, -e will return nothing.
+Note that a leading \"v\" or \"V\" in the input string is allowed, but
+ignored.
 "
-if [ ":$1" = ":--help" ] ; then
-    cat <<EOF
+HELP_OPTS="
+-n
+    Print the numeric component (major.minor.patch).
 
-EOF
-    exit 0
-fi
+-p
+    Print the prerelease component, with its leading \"-\".
+
+-m
+    Print the metadata component, with its leading \"+\".
+
+-i
+    Print the input string (if it is valid).
+
+When more than one of the -n, -p, -m options are given, the components
+are printed consecutively with no intervening spaces. For example,
+\"-np\" would cause \"1.0.0-beta+build2\" to be transformed to
+\"1.0.0-beta\".
+
+If -i is given along with -n, -p, or -m, its value is always written
+before the other components and separated from them by a space.
+"
+
+SCRIPTDIR=`cd \`dirname $0\`; pwd`
+. ${SCRIPTDIR}/citools-basics.rc || exit 1
 
 NUMERIC=n
 PRERELEASE=n
 METADATA=n
-DEPLOY_ENV=n
 INVAL=n
 SEMVER=
 ENV=
@@ -92,16 +52,12 @@ while [ $# != 0 ] ; do
           rest=`expr "$arg" : '-.\(.*\)'`
           set : "${narg}" "-${rest}" "$@"
           shift ;;
-      -h)
-          $0 --help ;;
       -n)
         NUMERIC=y ;;
       -p)
         PRERELEASE=y ;;
       -m)
         METADATA=y ;;
-      -e)
-        DEPLOY_ENV=y ;;
       -i)
         INVAL=y ;;
       -*)
@@ -137,30 +93,11 @@ fi
 if [ $METADATA = y ] ; then
     OUTVAL=${OUTVAL}`expr "${SEMVER}" : '[^+]*\(\+.*\)'`
 fi
-if [ $DEPLOY_ENV = y ] ; then
-    ENV=`expr "${SEMVER}" : '[^-]*-\([^+]*\).*'`
-    if [ ":${ENV}" = ":" ] ; then
-        if [ ":${PRODUCTION_ENVIRONMENT}" != ":" ] ; then
-            ENV="${PRODUCTION_ENVIRONMENT}"
-        fi
-    else
-        if [ ":${PRERELEASE_ENVIRONMENTS}" != ":" ] ; then
-            PRENV=
-            for env in ${PRERELEASE_ENVIRONMENTS} ; do
-                if [ ":${env}" = ":${ENV}" ] ; then
-                    PRENV="${env}"
-                    break
-                fi
-            done
-            ENV="${PRENV}"
-        fi
-    fi
-fi
 set :
 if [ $INVAL = y ] ; then
     set "$@" "${SEMVER}"
 fi
-set "$@" ${OUTVAL} ${ENV}
+set "$@" ${OUTVAL}
 shift
 if [ $# != 0 ] ; then
     echo "$@"

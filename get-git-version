@@ -1,72 +1,44 @@
 #!/bin/sh
 PROG=get-git-version
-DESC="If in a git repo, show the best semantic version number for the repo"
-VERSION=0.0.1
+DESC="If in a git repo, show its best semantic version number"
 USAGE1="${PROG} [-v|--verbose] [--ignore-untracked]"
-USAGE2="${PROG} -h|--help"
-USAGE3="${PROG} --version"
-SCRIPT_VERSION=0.0.1
 
-HELP_TEXT="
-NAME
-    $PROG - $DESC
+HELP_DESC="
+If run in a git repository, this tries to determine the semantic version
+number for the current state.
 
-SYNOPSIS
-    $USAGE1
-    $USAGE2
-    $USAGE3
+If the repo contains any uncommitted/untracked files, or if the current
+revision is not associated with a semantic version tag, then the script
+will attempt to create a \"development\" version by incrementing the
+\"patch\" number of the latest relevant semantic version tag that can be
+found, and adding a \"prerelease\" string of the form \"<tstamp>.dev\",
+where <tstamp> is a UTC timestamp of the form \"<YYYYmmdd>T<HHMMSS>Z\".
 
-DESCRIPTION
-    If run in a git repository, this tries to determine the semantic version
-    number for the current state.
+If there are no uncommitted/untracked files and the current revision is
+associated with one of more semantic version tags, then the latest
+semantic version tag is used.
 
-    If the repo contains any uncommitted/untracked files, or if the current
-    revision is not associated with a semantic version tag, then the script
-    will attempt to create a \"development\" version by incrementing the
-    \"patch\" number of the latest relevant semantic version tag that can be
-    found, and appending a string of the form \"<tstamp>-dev\", where <tstamp>
-    is a UTC timestamp of the form \"<YYYYmmdd>.<HHMMSS>Z\".
+If no relevant semantic version tag can be gleaned from the repo,
+\"0.0.1-<tstamp>.dev\" is used.
 
-    If there are no uncommitted/untracked files and the current revision is
-    associated with one of more semantic version tags, then the latest
-    semantic version tag is used.
+The script will write the version tag to standard output. 
+"
+HELP_OPTS="
+-v|--verbose
+    Write information messages to stderr.
 
-    If no relevant semantic version tag can be gleaned from the repo,
-    \"0.0.1-<tstamp>-dev\" is used.
-
-    The script will write the version tag to standard output. 
-
-    The following arguments are supported:
-
-    -v|--verbose
-        Write information messages to stderr.
-
-    --ignore-untracked
-        Untracked files are ignored when determining whether the repo is
-        up-to-date. Note that if the git repo contains an untracked \".ci\"
-        directory, it will be ignored even if this argument is not provided.
-
-    -h|--help
-        Write this help text and exit
-
-    --version
-        Write the script version number and exit
+--ignore-untracked
+    Untracked files are ignored when determining whether the repo is
+    up-to-date.
 "
 SCRIPTDIR=`cd \`dirname $0\`; pwd`
 . ${SCRIPTDIR}/citools-basics.rc || exit 1
 
-VECHO=:
 UNO=
 while test $# != 0 ; do
     case $1 in
-        -h|--help)
-            $SCRIPTDIR/$PROG --help
-            exit 0 ;;
-        --version)
-            echo ${PROG} - $VERSION
-            exit 0 ;;
         -v|--verbose)
-            VECHO=echo ;;
+            CITOOLS_VERBOSE=true export CITOOLS_VERBOSE ;;
         --ignore-untracked)
             UNO=-uno ;;
     esac
@@ -82,21 +54,21 @@ cd ${REPO_ROOT} || exit 1
 
 COMMIT=`git rev-list HEAD 2>/dev/null | head -1`
 
-$VECHO "Commit SHA1: $COMMIT" >&2
+vecho "Commit SHA1: $COMMIT"
 
-uncomm=`git status ${UNO} -s | grep -v '\?\? .ci'`
+uncomm=`git status ${UNO} -s`
 
-if test "$uncomm" != ":" ; then
-    $VECHO "There are uncommitted changes to this repo - using dev version:" >&2
-    $VECHO "$uncomm" >&2
+if test ":$uncomm" != ":" ; then
+    vecho "There are uncommitted changes to this repo - using dev version:"
+    vecho "$uncomm"
 else
     version=`git tag --list --points-at "${COMMIT}" | ${SCRIPTDIR}/versions -c`
-    if test ":$version" = ":" ; then
-        $VECHO "Current commit has a semantic version tag" >&2
+    if test ":$version" != ":" ; then
+        vecho "Current commit has a semantic version tag"
         echo "version=$version"
         exit 0
     else
-        $VECHO "Current commit does not have a semantic version tag" >&2
+        vecho "Current commit does not have a semantic version tag"
     fi
 fi
 
@@ -107,10 +79,9 @@ if test ":$version" = ":" ; then
         version="0.0.1"
         exit 0
     else
-        $VECHO "Found/incremented semantic version tag: $version" >&2
+        vecho "Found/incremented semantic version tag: $version"
     fi
 fi
-tstamp=`date -u +%Y%m%d.%H%M%SZ`
-echo "${version}-${tstamp}-dev"
-
+tstamp=`date -u +%Y%m%dT%H%M%SZ`
+echo "${version}-${tstamp}.dev"
 

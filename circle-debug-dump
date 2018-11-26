@@ -1,43 +1,41 @@
 #!/bin/sh
 PROG="circle-debug-dump"
-DESC="Dump out environment variable, git info, etc. in a CircleCI job"
-USAGE="${PROG} [-h|--help]"
-case $1 in
-  -h|--help)
-    cat <<EOF
-NAME
-    $PROG - $DESC
-
-SYNOPSIS
-    $USAGE
-
-DESCRIPTION
-    This script just dumps to standard output various information that can be
-    helpful when debugging a CircleCI job.
+DESC="Dump out environment variables and other info"
+HELP_DESC="
+This script just dumps to standard output various information that can be
+helpful when debugging a CircleCI job.
     
-    All environment variables are displayed, but the values of variables that
-    look like secure keys are shown as "----".
-EOF
-    exit 0 ;;
-esac
+All environment variables are displayed, but the values of variables that
+look like secure keys are shown as \"----\".
+"
 
-for command in \
-    "ls -la ." \
-    "ls -la $HOME" \
-    "git status" \
-    "git rev-list HEAD" \
-    "git tag --list" \
-    "git tag --list --points-at $CIRCLE_SHA1"
-do
-    echo "${command}:"
-    sh -c "${command}" 2>&1 | sed -e 's/^/    /'
-done
-
-echo "printenv:"
+echo "Environment variables:"
 printenv | sed -e 's/^/    /' \
                -e 's/PASSWORD=.*/PASSWORD=----/' \
                -e 's/PRIVATE_KEY=.*/PRIVATE_KEY=----/' \
                -e 's/SECRET_ACCESS_KEY=.*/SECRET_ACCESS_KEY=----/' \
                -e 's/TOKEN=.*/TOKEN=----/' \
                -e 's/KEYS=.*/KEYS=----/' \
+               -e 's/LOGIN_COMMAND=.*/LOGIN_COMMAND=----/'
+toplevel=`git rev-parse --show-toplevel 2>/dev/null`
+if [ ":${toplevel}" != ":" ] ; then
+    echo "git top level directory: ${toplevel}"
+fi
 
+set :
+shift
+if [ ":${CIRCLE_WORKING_DIRECTORY}" != ":" ] ; then
+    set "$@" "ls -la ${CIRCLE_WORKING_DIRECTORY}"
+fi
+set "$@" "ls -la ${HOME}"
+if [ ":${toplevel}" != ":" ] ; then
+    set "$@" "git status"
+fi
+if [ ":${WORKSPACE}" != ":" ] ; then
+    set "$@" "find ${WORKSPACE} -not -path '*/.git/*' -print | sort | xargs ls -ld"
+fi
+for command in "$@" ; do
+    echo "${command}:"
+    sh -c "${command}" 2>&1 | sed -e 's/^/    /'
+done
+exit 0

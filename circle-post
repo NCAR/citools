@@ -2,48 +2,33 @@
 PROG="circle-post"
 DESC="Submit a POST request to the CircleCI API"
 USAGE1="${PROG} path"
-USAGE2="${PROG} -h|--help"
-SCRIPTDIR=$(cd `dirname $0`; pwd)
-. ${SCRIPTDIR}/init-path.rc
 
 CIRCLECI_URL="${CIRCLECI_URL:-https://circleci.com/api/v1.1}"
+HELP_DESC="
+Submit a POST request to the CircleCI API v1.1. The body of the request is
+read from standard input.
+
+If the HTTP response status is not a 200 status, the entire response
+header and body are written to standard error and 1 is returned. If the
+HTTP response status is 200, the response header is discarded, the body is
+written to standard output, and 0 is returned.
+
+The \"path\" argument is the URL without the leading \"scheme\" and common
+path components for the V1.1 API (e.g., \"/project/...\").
+"
+HELP_ENV="
+CIRCLECI_URL
+   The base URL that the command-line argument will be appended to.
+   If not given, \"https://circleci.com/api/v1.1\" is used.
+
+CIRCLE_TOKEN
+   A CircleCI Personal API Token that will be used to authenticate.
+"
+
+SCRIPTDIR=`cd \`dirname $0\`; pwd`
+. ${SCRIPTDIR}/citools-basics.rc || exit 1
 
 case $1 in
-    -h|--help)
-      cat <<EOF
-NAME
-    $PROG - $DESC
-
-SYNOPSIS
-    $USAGE1
-    $USAGE2
-
-DESCRIPTION
-    Submit a POST request to the CircleCI API v1.1. The body of the request is
-    read from standard input.
-
-    If the HTTP response status is not a 200 status, the entire response
-    header and body are written to standard error and 1 is returned. If the
-    HTTP response status is 200, the response header is discarded, the body is
-    written to standard output, and 0 is returned.
-
-    The "path" argument is the URL without the leading "scheme" and common
-    path components for the V1.1 API (e.g., "/project/...").
-
-    The following command-line arguments are supported:
-
-    -h|--help
-        Print help text and quit.
-
-ENVIRONMENT
-    CIRCLECI_URL
-       The base URL that the command-line argument will be appended to.
-       If not given, "https://circleci.com/api/v1.1" is used.
-
-    CIRCLE_TOKEN
-       A CircleCI Personal API Token that will be used to authenticate.
-EOF
-          exit 0 ;;
     /*)
         URL_PATH="$@" ;;
     *)
@@ -53,6 +38,8 @@ esac
 URL="${CIRCLECI_URL}${URL_PATH}?circle-token=${CIRCLE_TOKEN}"
 
 payload=`cat`
+
+vecho "Running curl -is -L -X POST -H \"Content-Type: application/json\" -H \"Accept: application/json\" --data-binary \"\${payload}\" \"${URL}\" || exit 1"
 
 response=`curl -is -L -X POST \
      -H "Content-Type: application/json" \

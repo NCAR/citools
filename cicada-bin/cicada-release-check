@@ -1,0 +1,121 @@
+#!/bin/sh
+PROG=cicada-release-check
+DESC="Validate/fix a GitHub release for CICADA"
+USAGE1="${PROG}"
+
+HELP_DESC="
+Image metadata files are stored as \"assets\" of GitHub repo \"releases\".
+The name of a metadata file asset is the image's IMAGE_TAG metadata
+attribute.
+
+This verifies that the GitHub release object exists and is configured
+correctly. It is generally executed at the start of a CircleCI workflow.
+
+The CICADA framework prescribes that release objects have the following
+attributes:
+ - The associated tag is a valid semantic version string.
+ - If the tag has a pre-release component, it must be an approved name;
+   approved names can be defined in the PRERELEASE_ENVIRONMENTS
+   environment variable.
+ - The release *name* is the release *tag* without a prerelease
+   component (e.g. if the tag is \"1.0.0-test+build1\", the name is
+   \"1.0.0+build1\".).
+ - The release is associated with a specific commit SHA (not a branch).
+ - When an associated image is deployed, an image metadata file with
+   the name <semver_num>-<timestamp>[<semver_meta>] is uploaded as an
+   asset to the release, where <semver_num> is the \"major.minor.patch\"
+   part of the release tag, <timestamp> is a compact UTC timestamp
+   indicating the image creation time, and <semver_meta> is the metadata
+   portion of the release tag (if it is not empty, and with its leading
+   \"+\" replaced with \".\").
+ - If there is no metadata file asset corresponding to the current
+   release tag, the release tag must have a \"prerelease\" component
+   whose name matches the default deployment environment
+   (\$DEFAULT_ENVIRONMENT).
+
+If either of the first two prescriptions is invalid, the script will
+write an error message and return 1, which should cause the invoking
+CircleCI job to fail.
+
+The script will enforce the remaining prescriptions by modifying the
+release object if necessary. If the last prescription causes the release
+tag to change, the script will return an error after making the
+change; however, the change of tag should trigger a new CircleCI job
+with the new tag.
+"
+HELP_ENV="
+CIRCLE_TAG_PRERELEASE
+    If CIRCLE_TAG environment variable is set and is a valid semantic
+    version string with a prerelease component, the prerelease portion of
+    the tag (with its leading \"-\").
+DEFAULT_DEPLOY_ENV
+     The first environment in the \$PRERELEASE_ENVIRONMENTS list.
+
+ IMAGE_METADATA_CACHE
+     Name of a file containing image metadata for the current image.
+
+ RELEASE_ID
+     The id of the GitHub release object for the \$CIRCLE_TAG release.
+"
+SCRIPTDIR=`cd \`dirname $0\`; pwd`
+SCRIPTPARENT=`dirname ${SCRIPTDIR}`
+. ${SCRIPTPARENT}/citools-basics.rc || exit 1
+PATH="${SCRIPTPARENT}:${SCRIPTDIR}:$PATH" export PATH
+
+cicada-client-init --check || exit 1
+
+cicada-image-get-metadata || exit 1
+DESIRED_TAG="${CIRCLE_TAG}"
+if [ -s ${IMAGE_METADATA_CACHE} ] ; then
+    # The following command should set REVISION_SHA1
+    . ${IMAGE_METADATA_CACHE} || exit 1
+    if [ ":${REVISION_SHA1}" != ":${CIRCLE_SHA1}" ] ; then
+        echo "${PROG}: image metadata git SHA1 hash does not match \$CIRCLE_SHA1" >&2
+        exit 1
+    fi
+else
+    # If there is no existing image for this tag, the prerelease tag must
+    # be non-null; otherwise we need to retag
+    if [ ":${CIRCLE_TAG_PRERELEASE}" = ":" ] ; then
+        DESIRED_TAG="${CIRCLE_TAG_NUM}-${DEFAULT_DEPLOY_ENV}${CIRCLE_TAG_META}"
+        vecho "Constructed new tag because of missing image: ${DESIRED_TAG}"
+    fi
+fi
+DESIRED_NAME="${CIRCLE_TAG_NUM}${CIRCLE_TAG_META}"
+
+#
+# Now verify release object is correct. Fix it if it is not
+#
+
+old_data=`jq '{tag_name,target_commitish,name,body,draft,prerelease}' <${RELEASE_OBJ_CACHE}`
+
+vecho "release info: ${old_data}"
+
+old_tag_name=`jq -r .tag_name <${RELEASE_OBJ_FILE}`
+
+#
+# Patch release if necessary
+#
+new_data=`echo "$old_data" |
+  sed -e 's/"tag_name": ".*",/"tag_name": "'${DESIRED_TAG}'",/' \
+    -e 's/"name": ".*",/"name": "'${DESIRED_NAME}'",/' \
+    -e 's/"target_commitish": ".*",/"target_commitish": "'${CIRCLE_SHA1}'",/'`
+
+if [ "${old_data}" != "${new_data}" ] ; then
+    vecho "Release must be patched..."
+    vecho "New release info: ${new_data}"
+
+    path="/repos/${REPO}/releases/${RELEASE_ID}"
+    echo "${new_data}" | github-patch "${path}" >/dev/null || exit 1
+    if [ ":${old_tag_name}" != ":${DESIRED_TAG}" ] ; then
+        echo "WARNING: the release tag has been changed to ${DESIRED_TAG}" >&2
+        echo "A new build should be triggered automatically" >&2
+
+        git push --delete origin "${old_tag_name}"
+        exit 1
+    fi
+fi
+
+exit 0
+
+
