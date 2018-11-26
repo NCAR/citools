@@ -5,7 +5,7 @@ DESC="Return 1 if the string looks false, 0 otherwise"
 USAGE1="${PROG} [--not] <strvalue>"
 
 HELP_DESC="
-If the string is "false", "no", a leading substring of either, regardless
+If the string is \"false\", \"no\", a leading substring of either, regardless
 of case, or if it is empty, return 1 (Bourne shell's concept of false).
 Otherwise, return 0.
 "
