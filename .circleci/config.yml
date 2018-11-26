@@ -1,0 +1,35 @@
+version: 2.1
+executors:
+  generic-executor:
+    docker:
+      - image: circleci/php:7.2-cli
+
+jobs:
+  gendocs:
+    executor: generic-executor
+    steps:
+      - checkout
+
+      - run:
+          name: "Generate documentation"
+          command: |
+              set +e
+              git clone https://github.com/NCAR/citools.wiki.git /tmp/wiki
+              mkdir -p /tmp/wiki/docs
+              ./citools-docgen --wikidir=docs /tmp/wiki/docs
+              cd /tmp/wiki
+              git add .
+              git commit -m 'Latest doc build'
+              git push
+
+workflows:
+  version: 2
+  build:
+    jobs:
+      - gendocs:
+          filters:
+            branches:
+              only: /.*/
+
+
+
