@@ -35,8 +35,8 @@ WIKI_URL="https://github.com/NCAR/citools.wiki.git"
 WIKIDIR=
 case $1 in
     --wikidir=*)
-        WIKIDIR=`expr "$2" : '--wikidir=\(.*\)$'`
-        shift ; shift ;;
+        WIKIDIR=`expr "$1" : '--wikidir=\(.*\)$'`
+        shift ;;
 esac
 DOCDIR="$1"
 if [ ":$DOCDIR" = ":" ] ; then
