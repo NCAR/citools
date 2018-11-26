@@ -1,15 +1,31 @@
 #!/bin/sh
 PROG=circle-sim
 DESC="Simulate a CircleCI build environment by setting env variables"
-USAGE1="${PROG} <command> ..."
+USAGE1="${PROG} [<rcfiles...>]"
 
 HELP_DESC="
 This script simulates a CircleCI build environment by setting environment
-variable that CircleCI would normally set before running the indicated
-command. It will not set CIRCLE_TAG, and CIRCLE_BRANCH will be set to
+variable that CircleCI would normally set before running an interactive
+shell. It will not set CIRCLE_TAG, and CIRCLE_BRANCH will be set to
 \"master\" by default, but if CIRCLE_TAG and CIRCLE_BRANCH are already in
 the environment when this script is invoked, the existing values will be
 passed on.
+"
+HELP_ARGS="
+<rcfiles...>
+    Source the indicated files before starting the shell. This can be used
+    to define additional environment variables (e.g. variables that would
+    be defined in a context or as project variables in an actual CircleCI
+    job). This can appear multiple times. CircleCI documents the precedence
+    of environment variable sources at:
+
+       https://circleci.com/docs/2.0/env-vars
+"
+HELP_ENV="
+GH_TOKEN
+    A GitHub Personal Access Token that allows read access to the target
+    repo. This should either be in the environment before invoking the
+    script, or defined in a file passed as a command-line argument.
 "
 
 SCRIPTDIR=`cd \`dirname $0\`; pwd`
@@ -24,6 +40,14 @@ if [ ":${REPO}" = ":" ] ; then
     echo "${PROG}: unable to determine remote git repo" >&2
     exit 1
 fi
+
+while [ $# != 0 ] ; do
+    echo "Sourcing $1..."
+    . $1 || exit 1
+    shift
+done
+REPO_ROOT=`git rev-parse --show-toplevel`
+cd "${REPO_ROOT}" || exit 1
 
 
 CI=true
@@ -50,8 +74,5 @@ export CI CIRCLECI CIRCLE_BRANCH CIRCLE_BUILD_NUM CIRCLE_BUILD_URL \
        CIRCLE_PROJECT_USERNAME CIRCLE_REPOSITORY_URL CIRCLE_SHA1 \
        CIRCLE_USERNAME CIRCLE_WORKFLOW_ID 
 
-if [ $# = 0 ] ; then
-    set printenv
-fi
-exec "$@"
-
+PS1='circle-sim# ' export PS1
+bash --noprofile --norc -i 
