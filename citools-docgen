@@ -66,12 +66,14 @@ find . -type f ! -name '*~' -perm -0005 -exec grep -l '^PROG=' {} \; \
     relpath=`expr "${file}" : '\./\(.*\)$'`
     descline=`sed -n -e '/^DESC=/p' ${file}`
     eval ${descline}
-    ${file} --help >${TMPFILE}
+    echo '```text' >${TMPFILE}
+    ${file} --help >>${TMPFILE}
+    echo '```' >>${TMPFILE}
     if [ -s "${TMPFILE}" ] ; then
         dir=`dirname "${DOCDIR}/${file}"`
         mkdir -p "${dir}"
-        mv "${TMPFILE}" "${DOCDIR}/${file}.txt"
-        echo "- [${relpath}](${WIKI_URL}/${WIKIDIR}/${relpath}.txt) - ${DESC}" >>${INDEXFILE}.tmp
+        mv "${TMPFILE}" "${DOCDIR}/${file}.md"
+        echo "- [${relpath}](${WIKI_URL}/${WIKIDIR}/${relpath}.md) - ${DESC}" >>${INDEXFILE}.tmp
     fi
 done
 
