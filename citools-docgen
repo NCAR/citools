@@ -23,7 +23,7 @@ index.md
 SCRIPTDIR=`cd \`dirname $0\`; pwd`
 . ${SCRIPTDIR}/citools-basics.rc || exit 1
 
-WIKI_URL="https://github.com/NCAR/citools.wiki.git"
+WIKI_URL="https://github.com/NCAR/citools/wiki"
 
 DOCDIR="$1"
 if [ ":$DOCDIR" = ":" ] ; then
