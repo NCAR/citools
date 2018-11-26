@@ -58,7 +58,7 @@ find . -type f ! -name '*~' -perm -0005 -exec grep -l '^PROG=' {} \; \
         dir=`dirname "${DOCDIR}/${file}"`
         mkdir -p "${dir}"
         mv "${TMPFILE}" "${DOCDIR}/${file}.md"
-        echo "- [${relpath}](${WIKI_URL}/${relpath}.md) - ${DESC}" >>${INDEXFILE}.tmp
+        echo "- [${relpath}](${WIKI_URL}/${relpath}) - ${DESC}" >>${INDEXFILE}.tmp
     fi
 done
 
