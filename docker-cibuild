@@ -73,6 +73,11 @@ definitions, one per line, in the given order:
   BASE_VERSION      The release tag of the base image, if the base image
                     was built by this script.
 "
+HELP_OPTS="
+--metadata=file
+    Write image metadata to the named file. If not given write it to
+    standard output.
+"
 HELP_ENV="
 RELEASE_TAG
     If given, a (nominally semantic) version tag for the release. If not
