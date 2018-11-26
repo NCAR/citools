@@ -1,19 +1,12 @@
 #!/bin/sh
 PROG=citools-docgen
 DESC="Generate citools documentation"
-USAGE1="${PROG} [--wikidir=<dir>] docdir"
+USAGE1="${PROG} docdir"
 
 HELP_DESC="
 This script creates documentation pages in the GitHub citools wiki. It
 creates man-like text documents by invoking each script with its --help
 option, and a markdown index file with links to the text documents.
-"
-HELP_OPTS="
---wikidir=<dir>
-    The name of the directory in the wiki in which the documents will be
-    installed. This is used in constructing the links to the documents in
-    the index file. If not given, the last component of the docdir argument
-    is used.
 "
 HELP_ARGS="
 docdir
@@ -32,12 +25,6 @@ SCRIPTDIR=`cd \`dirname $0\`; pwd`
 
 WIKI_URL="https://github.com/NCAR/citools.wiki.git"
 
-WIKIDIR=
-case $1 in
-    --wikidir=*)
-        WIKIDIR=`expr "$1" : '--wikidir=\(.*\)$'`
-        shift ;;
-esac
 DOCDIR="$1"
 if [ ":$DOCDIR" = ":" ] ; then
     echo "${PROG}: directory argument required" >&2
@@ -47,12 +34,10 @@ if [ ! -d "${DOCDIR}" ] ; then
     echo "${PROG}: $DOCDIR: not a directory" >&2
     exit 1
 fi
-if [ ":$WIKIDIR" = ":" ] ; then
-    WIKIDIR=`basename "${DOCDIR}"`
-fi
 
 TMPFILE="${DOCDIR}/.tmp"
-INDEXFILE="${DOCDIR}/index.md"
+INDEXFILE="${DOCDIR}/Home.md"
+
 :>${INDEXFILE}.tmp
 
 REPO_ROOT=`git rev-parse --show-toplevel` || exit 1
@@ -73,11 +58,20 @@ find . -type f ! -name '*~' -perm -0005 -exec grep -l '^PROG=' {} \; \
         dir=`dirname "${DOCDIR}/${file}"`
         mkdir -p "${dir}"
         mv "${TMPFILE}" "${DOCDIR}/${file}.md"
-        echo "- [${relpath}](${WIKI_URL}/${WIKIDIR}/${relpath}.md) - ${DESC}" >>${INDEXFILE}.tmp
+        echo "- [${relpath}](${WIKI_URL}/${relpath}.md) - ${DESC}" >>${INDEXFILE}.tmp
     fi
 done
 
-sort ${INDEXFILE}.tmp >${INDEXFILE}
+cat >${INDEXFILE} <<EOF
+Welcome to the citools wiki!
+
+Most documents in the wiki are generated automatically when a change is
+committed. These documents are simply snapshots of each script's `--help`
+documentation.
+
+EOF
+
+sort ${INDEXFILE}.tmp >>${INDEXFILE}
 rm -f ${INDEXFILE}.tmp
 
 trap "" 0
