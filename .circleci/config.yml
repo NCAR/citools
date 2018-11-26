@@ -25,9 +25,9 @@ jobs:
 workflows:
   version: 2
   build:
-    context: sweg
     jobs:
       - gendocs:
+          context: sweg
           filters:
             branches:
               only: /.*/
