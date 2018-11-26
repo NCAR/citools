@@ -16,7 +16,7 @@ jobs:
               set +e
               git config --global user.email "sweg-ci@ucar.edu"
               git config --global user.name "NCAR SWEG CI"
-              git clone git@github.com/NCAR/citools.wiki.git /tmp/wiki
+              git clone git@github.com:NCAR/citools.wiki.git /tmp/wiki
               mkdir -p /tmp/wiki/docs
               ./citools-docgen --wikidir=docs /tmp/wiki/docs
               cd /tmp/wiki
