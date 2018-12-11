@@ -5,7 +5,6 @@ USAGE1="${PROG} env_file"
 USAGE2="${PROG}"
 USAGE3="${PROG} --add|--add-secret <envvars...>"
 
-DEFAULT_CDIMPL="cicada"
 DEFAULT_REGISTRY_PREFIX="ncar"
 
 HELP_DESC="
