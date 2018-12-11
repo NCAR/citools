@@ -1,7 +1,7 @@
 #!/bin/sh
 PROG=docker-tag-push
 DESC="Tag and push a docker image"
-USAGE1="${PROG} local_image remote_image [tags...]"
+USAGE1="${PROG} [--semver=<version>] local_image remote_image [tags...]"
 
 HELP_DESC="
 This script is a front-end for \"docker tag\" and \"docker push\".
@@ -15,8 +15,32 @@ than dockerhub, the remote image name should start with the registry name.
 This script uses the docker-get-login if necessary to retrieve a command
 for logging in to the remote registry.
 "
+HELP_OPTS="
+--semver=<version>
+    If included, this adds additional tags. Given a semantic version string
+    of the form \"<major>.<minor>.<patch>\", the tags \"<major>\",
+    \"<major>.<minor>\", and \"<major>.<minor>.<patch>\" are added.
+"
+HELP_ARGS="
+local_image
+    A local image name.
+
+remote_image
+    A remote image name, with or without tags.
+
+[tags]
+    Additional tags.
+"
 SCRIPTDIR=`cd \`dirname $0\`; pwd`
 . ${SCRIPTDIR}/citools-basics.rc || exit 1
+
+SEMVER=
+case $1 in
+    --semver=*)
+        SEMVER=`expr "$1" : '--semver=\(.*\)'`
+        parse-semver "${SEMVER}" || exit 1
+        shift ;;
+esac
 
 LOCAL_IMAGE="$1"
 if [ ":${LOCAL_IMAGE}" = ":" ] ; then
@@ -30,21 +54,33 @@ if [ ":${REMOTE_IMAGE}" = ":" ] ; then
     exit 1
 fi
 shift
+
+TAGS="$@"
+
 remote_tag=`expr "${REMOTE_IMAGE}" : '.*:\([^:][^:]*\)$'`
 if [ ":${remote_tag}" != ":" ] ; then
-    TAGS="$@ ${remote_tag}"
+    TAGS="${TAGS} ${remote_tag}"
     REMOTE_IMAGE=`expr "${REMOTE_IMAGE}" : '\(.*\):[^:][^:]*$'`
 fi
+vecho REMOTE_IMAGE="${REMOTE_IMAGE}"
 
-LOCAL_IMAGE_TAG=`expr "${LOCAL_IMAGE}" : '.*:\(.*\)$'`
+LOCAL_IMAGE_TAG=`expr "${LOCAL_IMAGE}" : '.*:\([^:]*\)$'`
 if [ ":${LOCAL_IMAGE_TAG}" != ":" ] ; then
-    TAGS="$@ ${LOCAL_IMAGE_TAG}"
+    TAGS="${TAGS} ${LOCAL_IMAGE_TAG}"
 fi
-TAGS=`echo "${TAGS}" | sort -u`
+if [ ":${SEMVER}" != ":" ] ; then
+    major=`expr "${SEMVER}" : '\([0-9]*\)\..*'`
+    minor=`expr "${SEMVER}" : '[0-9]*\.\([0-9]*\)\..*'`
+    patch=`expr "${SEMVER}" : '[0-9]*\.[0-9]*\.\([0-9]*\).*'`
+    TAGS="${TAGS} ${major}.${minor}.${patch} ${major}.${minor} ${major}"
+fi
+set : `echo "${TAGS}" | tr ' ' '\n' | sort -u`
+TAGS="$@"
 if [ ":${TAGS}" = ":" ] ; then
     echo "${PROG}: no tags" >&2
     exit 1
 fi
+vecho TAGS=${TAGS}
 
 for tag in ${TAGS} ; do
     docker tag "${LOCAL_IMAGE}" "${REMOTE_IMAGE}:${tag}" || exit 1

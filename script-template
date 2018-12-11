@@ -26,3 +26,5 @@ myfile
 SCRIPTDIR=`cd \`dirname $0\`; pwd`
 . ${SCRIPTDIR}/citools-basics.rc || exit 1
 
+# if you need a scratch directory, uncomment the following:
+#. setup-scratchdir.rc

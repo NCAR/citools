@@ -3,6 +3,7 @@ PROG=circle-env
 DESC="Define circle-related env variables or verify they are set"
 USAGE1="${PROG} env_file"
 USAGE2="${PROG}"
+USAGE3="${PROG} --add|--add-secret <envvars...>"
 
 DEFAULT_CDIMPL="cicada"
 DEFAULT_REGISTRY_PREFIX="ncar"
@@ -21,15 +22,14 @@ Without the filename argument, the script verifies that the variables
 are defined and returns 1 if any are not. It is meant to be run from
 circle-* scripts.
 "
+HELP_OPTS="
+--add <envvars>
+    Add definitions of the named environment variables to the \$INIT_RC file.
+"
 HELP_ENV="
 When writing variable definitions, the following environment variables can
 be predefined; their values will be propagated through if set, and
 initialized otherwise:
-
-CDIMPL
-    The name of the \"deployment service\" to use. Default is
-    \"${DEFAULT_CDIMPL}\". This name must correspond to a script in the
-    \$LOCAL_BIN directory. See CDIMPL-README.md.
 
 LOCAL_BIN
     The directory where additional software should be defined for use by
@@ -66,7 +66,7 @@ CIRCLE_TAG_META
 
 CITOOLS_CIRCLE_ENV
     Always set to "true" by this script.
-
+    
 INIT_RC
     The name of the file the script writes to. This file should be sourced
     at the start of CircleCI \"run\" job steps to set environment
@@ -79,7 +79,15 @@ SAVED_PATH="${PATH}"
 SCRIPTDIR=`cd \`dirname $0\`; pwd`
 . ${SCRIPTDIR}/citools-basics.rc || exit 1
 
-if [ ":$1" != ":" ] ; then
+if [ ":$1" = ":--add" ] ; then
+    MODE=add
+    SUBMODE=
+    shift
+elif [ ":$1" = ":--add-secret" ] ; then
+    MODE=add
+    SUBMODE=secret
+    shift
+elif [ ":$1" != ":" ] ; then
     MODE=write
     init_rc=`cd \`dirname $1\`; pwd`/`basename $1`
     if [ ":${INIT_RC}" != ":" ] ; then
@@ -95,7 +103,6 @@ else
 fi
 
 VARS="
- CDIMPL
  LOCAL_BIN
  STATEDIR
  WORKSPACE
@@ -109,22 +116,23 @@ SEMVER_VARS="
  CIRCLE_TAG_META
 "
 
-if [ $MODE = check ] ; then
-    if [ ":${CIRCLE_TAG_IS_SEMVER}" = ":true" ] ; then
-       VARS="${VARS}${SEMVER_VARS}"
-    fi
-    init_err=n
-    for var in ${VARS} ; do
-        eval val=\"\$${var}\"
-        if [ ":$val" = ":" ] ; then
-            echo "${PROG}: variable $var is not set" >&2
-            init_err=y
+if [ $MODE = add ] ; then
+    check-envvars --prog=${PROG} INIT_RC || exit 1
+    for var in "$@" ; do
+        eval val="\"\$${var}\""
+        if [ ":${SUBMODE}" = ":secret" ] ; then
+            vecho "${var}=----"
+        else
+            vecho "${var}=\"${val}\""
         fi
+        echo "${var}=\"${val}\" export ${var}" >> ${INIT_RC}
     done
-    if [ $init_err = y ] ; then
-        exit 1
-    fi
     exit 0
+elif [ $MODE = check ] ; then
+    if [ ":${CIRCLE_TAG_IS_SEMVER}" = ":true" ] ; then
+       VARS="${VARS} CIRCLE_TAG_NUM"
+    fi
+    check-envvars --prog=${PROG} ${VARS} || exit 1
 fi
 CITOOLS_CIRCLE_ENV=true
 
@@ -135,12 +143,6 @@ fi
 STATEDIR="${STATEDIR:-${WORKSPACE}/state}"
 LOCAL_BIN="${LOCAL_BIN:=${SCRIPTDIR}}"
 
-CDIMPL="${CDIMPL:-${DEFAULT_CDIMPL}}"
-if [ ! -x "${SCRIPTDIR}/${CDIMPL}" ] ; then
-    echo "${PROG}: ${CDIMPL} is not a known deployment service" >&2
-    exit 1
-fi
-
 CIRCLE_TAG_IS_SEMVER=false
 if [ ":${CIRCLE_TAG}" != ":" ] ; then
     CIRCLE_TAG_NUM=`parse-semver -n ${CIRCLE_TAG}`
@@ -149,6 +151,9 @@ if [ ":${CIRCLE_TAG}" != ":" ] ; then
     if [ ":${CIRCLE_TAG_NUM}" != ":" ] ; then
         CIRCLE_TAG_IS_SEMVER=true
     fi
+fi
+if [ ":${CIRCLE_TAG_IS_SEMVER}" = ":true" ] ; then
+   VARS="${VARS}${SEMVER_VARS}"
 fi
 PATH="${SCRIPTDIR}:${SAVED_PATH}"
 for var in PATH ${VARS} ; do

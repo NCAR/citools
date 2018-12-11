@@ -1,6 +1,0 @@
-# citools orb
-description: SWEG citools orb
-commands:
-  echo:
-    steps:
-      - run: echo "hello world"

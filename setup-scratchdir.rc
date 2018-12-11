@@ -1,0 +1,9 @@
+:
+if [ ":${TMPDIR}" = ":" ] ; then
+    TMPDIR="/tmp/citools.tmp" export TMPDIR
+    trap "rm -rf ${TMPDIR} ; exit 255" 1 2 13 15
+    trap "rc=$? ; rm -rf ${TMPDIR} ; exit $rc" 0
+    mkdir -p "${TMPDIR}"
+fi
+SCRATCHDIR="${TMPDIR}/${PROG:-citools}.tmp.$$" export SCRATCHDIR
+mkdir -p ${SCRATCHDIR}

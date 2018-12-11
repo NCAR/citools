@@ -31,7 +31,8 @@ elif [ ":$registry" = "dockerhub" ] ; then
 fi
 login=`docker-get-login "$1" 2>/dev/null`
 if [ ":$login" != ":" ] ; then
-    vecho "Appending to $INIT_RC: '${variable}=\"${login}\" export ${variable'"
-    echo "${variable}=\"${login}\" export ${variable}" >>${INIT_RC}
+    eval ${variable}="\"${login}\""
+    export $variable
+    circle-env --add-secret ${variable}
 fi
 exit 0

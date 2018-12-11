@@ -1,12 +1,17 @@
 #!/bin/sh
 PROG="install-aws-cli"
 DESC="Install the AWS CLI"
-USAGE1="${PROG} [dest_dir]"
+USAGE1="${PROG} [--force] [dest_dir]"
 
 BINDIR=/usr/local/bin
 HELP_DESC="
 Install the AWS Command Line Interface. The installation directory can
 be provided as a command-line argument (default=$BINDIR).
+"
+HELP_OPTS="
+--force
+    If given, the AWS CLI will be installed even if it appears to be
+    installed already.
 "
 HELP_ARGS="
 dest_dir
@@ -15,22 +20,29 @@ dest_dir
 SCRIPTDIR=`cd \`dirname $0\`; pwd`
 . ${SCRIPTDIR}/citools-basics.rc || exit 1
 
+if [ ":$1" = ":--force" ] ; then
+    shift
+else
+    check_aws=`type aws 2>/dev/null`
+    if [ ":${check_aws}" != ":" ] ; then
+        vecho "${check_aws}"
+        exit 0
+    fi
+fi
+
+vecho "Installing aws..."
 if [ ":$1" != ":" ] ; then
     cd $1 || exit 1
     BINDIR=`pwd` 
 fi
 
-TMPDIR=/tmp/aws$$
-trap "rm -rf ${TMPDIR} ; exit 1" 0 1 2 13 15
-mkdir -p "${TMPDIR}"
+. setup-scratchdir.rc
 
-cd ${TMPDIR}
+cd ${SCRATCHDIR}
 curl "https://s3.amazonaws.com/aws-cli/awscli-bundle.zip" -o "awscli-bundle.zip" || exit 1
 unzip awscli-bundle.zip || exit 1
-${TMPDIR}/awscli-bundle/install -i ${BINDIR} || exit 1
-
-rm -rf "${TMPDIR}"
-trap "" 0
+mkdir -p ${BINDIR}/awscli
+${SCRATCHDIR}/awscli-bundle/install -i ${BINDIR}/awscli -b ${BINDIR}/aws || exit 1
 
 exit 0
 

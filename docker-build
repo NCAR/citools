@@ -16,12 +16,10 @@ supplement the final image with the following labels:
 "
 SCRIPTDIR=`cd \`dirname $0\`; pwd`
 PATH="${SCRIPTDIR}:${PATH}" export PATH
-TMPDIR=/tmp/docker-build.$$.d
-trap "rm -rf ${TMPDIR} ; exit 255" 0 1 2 13 15
-mkdir -p ${TMPDIR} || exit 1
+. setup-scratchdir.rc
 
-NEWARGS1="${TMPDIR}/nargs1"
-NEWARGS2="${TMPDIR}/nargs2"
+NEWARGS1="${SCRATCHDIR}/nargs1"
+NEWARGS2="${SCRATCHDIR}/nargs2"
 touch ${NEWARGS1}
 touch ${NEWARGS2}
 # Re-write command-line arguments for two invocations of "docker build".
@@ -164,8 +162,8 @@ END {
 ' nargs1=${NEWARGS1} nargs2=${NEWARGS2} -
 
 # Run our first invocation of "docker build", via "docker-cibuild".
-METADATA=${TMPDIR}/metadata
-BUILD_OUTPUT=${TMPDIR}/build.out
+METADATA=${SCRATCHDIR}/metadata
+BUILD_OUTPUT=${SCRATCHDIR}/build.out
 set :
 while read arg ; do
     set "$@" "${arg}"
@@ -174,7 +172,7 @@ shift
 if test ":$1" = ":--help" ; then
     echo "${HELP_TEXT}"
     docker build --help
-    rm -rf "${TMPDIR}"
+    rm -rf "${SCRATCHDIR}"
     exit 0
 fi
 quiet="$1"
@@ -214,8 +212,7 @@ while read arg ; do
     set "$@" "${arg}"
 done <${NEWARGS2}
 shift
-rm -rf "${TMPDIR}"
-trap "" 0
+
 if test ":$quiet" != ":--quiet=true" ; then
     echo Build 2: docker build "$@"
 fi

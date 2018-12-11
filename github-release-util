@@ -1,0 +1,252 @@
+#!/bin/sh
+PROG=github-release-util
+DESC="Utility for managing GitHub \"release\" object"
+USAGE1="${PROG} --download-asset=<regex> [--cache=<dir>] [<release_tag>]"
+USAGE2="${PROG} --get-releases [--cache=<dir>]"
+USAGE3="${PROG} --get-release [--cache=<dir>] [<release_tag>]"
+USAGE4="${PROG} --patch-release [--cache=<dir>] [<release_tag>]"
+USAGE5="${PROG} --purge-cache [--cache=<dir>]"
+USAGE6="${PROG} --upload-asset=<file_name> [--asset=<name>] [--cache=<dir>]
+                        [<release_tag>]"
+
+HELP_DESC="
+This script supports various operations on GitHub \"release\" objects.
+"
+HELP_OPTS="
+--download-asset=<regex>
+    Download the indicated asset; select the first asset with a name
+    matching the given pattern. The pattern must be a simple regular
+    expression, which will be automatically anchored at the beginning
+    (i.e. there is an implied leading \"^\"). Write the asset contents
+    to standard output.
+
+--get-releases
+    Retrieve JSON objects for all releases; JSON is written to standard
+    output.
+
+--get-release
+    Retrieve a specific release. A JSON object is written to standard
+    output.
+
+--patch-release
+    Read a JSON object from standard input and use it to patch the release.
+    The object should contain the following members: tag_name,
+    target_commitish, name, body, draft, and prerelease. Any other members
+    are ignored.
+
+--purge-cache
+    Purge the cache.
+
+--upload-asset=<file_name>
+    Upload the named file as an asset to the release. The name of the
+    asset will be the basename of the file, unless the --asset option
+    is also given,
+
+--asset
+    When used with --upload-asset, the name to assign to the asset,
+    instead of the basename of the uploaded file.
+
+--cache=<dir>
+    The name of a directory in which release info will be cached. If not
+    given, the directory named by the STATEDIR environment variable is used
+    if it is set; otherwise, \"\$TMPDIR\" is used if set; otherwise
+    \"/tmp\" is used.
+"
+HELP_ARGS="
+release_tag
+    The \"tag_name\" of the release (not the \"name\"). If not given, the
+    RELEASE_TAG environment variable is used.
+"
+HELP_ENV="
+GH_TOKEN
+   A GitHub Personal API Token that will be used to authenticate.
+
+GIT_REPO
+    The target Github username and repository name, with a separating
+    \"/\". If not set, the value is derived using \"git config --get
+    remote.origin.url\"
+
+RELEASE_TAG
+    The default release tag, if the --release-tag argument is not
+    given.
+
+STATEDIR
+    A directory for storing job state. The script uses this directory
+    for cacheing if no --cache argument is given.
+"
+
+SCRIPTDIR=`cd \`dirname $0\`; pwd`
+. ${SCRIPTDIR}/citools-basics.rc || exit 1
+
+TMP=${TMPDIR:-/tmp}
+CACHEDIR="${STATEDIR:-${TMP}}"
+MODE=
+ASSET_REGEX=
+ASSET=
+ASSET_FILE=
+
+while [ $# != 0 ] ; do
+    case $1 in
+        --asset=*)
+            ASSET=`expr "$1" : '--asset=\(.*\)$'` ;;
+        --cache=*)
+            CACHEDIR=`expr "$1" : '--cache=\(.*\)$'` ;;
+        --download-asset=*)
+            MODE=download-asset
+            ASSET_REGEX=`expr "$1" : '--download-asset=\(.*\)$'` ;;
+        --get-releases)
+            MODE=get-releases ;;
+        --get-release)
+            MODE=get-release ;;
+        --patch-release)
+            MODE=patch-release ;;
+        --purge-cache)
+            MODE=purge-cache ;;
+        --upload-asset=*)
+            MODE=upload-asset
+            ASSET_FILE=`expr "$1" : '--upload-asset=\(.*\)$'`
+            if [ ! -f "${ASSET_FILE}" ] ; then
+                echo "${PROG}: ${ASSET_FILE}: no such file" >&2
+            fi ;;
+        -*)
+            echo "${PROG}: illegal option: $1" >&2
+            echo "${USAGE} >&2" >&2
+            exit 1 ;;
+        *)
+            RELEASE_TAG="$1" ;;
+    esac
+    shift
+done
+if [ ":${MODE}" = ":" ] ; then
+    echo "${PROG}: no action specified" >&2
+    echo "${USAGE}" >&2
+    exit 1
+fi
+if [ "${MODE}" != "get-releases" ] && [ ":${RELEASE_TAG}" = ":" ] ; then
+    echo "${PROG}: release tag is required" >&2
+    exit 1
+fi
+export CACHEDIR
+check-envvars --prog=${PROG} GH_TOKEN CACHEDIR
+
+vecho "MODE=${MODE}"
+
+if [ ":${GIT_REPO}" ] ; then
+    gro=`git config --get remote.origin.url`
+    GIT_REPO=`expr "${gro}" : '.*[:/]\([^:/][^:/]*/[^:/][^:/]*\)\.git$'`
+    export GIT_REPO
+fi
+vecho "GIT_REPO=${GIT_REPO}"
+
+REPO_CACHE="${CACHEDIR}/${GIT_REPO}"
+if [ ${MODE} = purge-cache ] ; then
+    rm -rf `dirname ${REPO_CACHE}`
+    exit 0
+fi
+RELEASE_CACHE="${REPO_CACHE}/${RELEASE_TAG}"
+mkdir -p "${RELEASE_CACHE}" || exit 1
+
+RELEASES_CACHE="${REPO_CACHE}/releases.json"
+RELEASE_ASSET_LIST="${RELEASE_CACHE}/release_assets.json"
+RELEASE_OBJ_CACHE="${RELEASE_CACHE}/release.json"
+RELEASE_ID_CACHE="${RELEASE_CACHE}/release_id"
+RELEASE_ID=`cat ${RELEASE_ID_CACHE} 2>/dev/null`
+
+if [ ! -s ${RELEASES_CACHE} ] ; then
+    vecho "Running github-get /repos/${GIT_REPO}/releases >${RELEASES_CACHE}"
+    github-get "/repos/${GIT_REPO}/releases" >${RELEASES_CACHE} || exit 1
+fi
+if [ "${MODE}" = "get-releases" ] ; then
+    cat ${RELEASES_CACHE} || exit 1
+    exit 0
+fi
+if [ ! -s ${RELEASE_OBJ_CACHE} ] ; then
+    jq ".[] | select(.tag_name==\"${RELEASE_TAG}\")" <${RELEASES_CACHE} >${RELEASE_OBJ_CACHE}
+    if [ $? != 0 ] ; then
+        cat ${RELEASE_OBJ_CACHE} >&2
+        rm -f ${RELEASE_OBJ_CACHE}
+        echo "${PROG}: unable to access release object for ${RELEASE_TAG}" >&2
+        exit 1
+    fi
+fi
+
+if [ "${MODE}" = "get-release" ] ; then
+    cat ${RELEASE_OBJ_CACHE}
+    exit 0
+fi
+
+if [ ":${RELEASE_ID}" = ":" ] ; then
+    RELEASE_ID=`jq -r '.id' <${RELEASE_OBJ_CACHE}`
+    if expr "${RELEASE_ID}" : '[0-9][0-9]*$' >/dev/null ; then
+        echo "${RELEASE_ID}" >${RELEASE_ID_CACHE}
+    else
+        echo "${PROG}: unable to retrieve release id" >&2
+        exit 1
+    fi
+fi
+vecho RELEASE_ID=${RELEASE_ID}
+export RELEASE_ID
+
+if [ ! -s ${RELEASE_ASSET_LIST} ] ; then
+    jq .assets <${RELEASE_OBJ_CACHE} >${RELEASE_ASSET_LIST}
+fi
+if [ "${MODE}" = "download-asset" ] ; then
+    if [ -s ${RELEASE_ASSET_CACHE} ] ; then
+        cat "${RELEASE_ASSET_CACHE}"
+        exit 0
+    fi
+    if [ ! -s ${RELEASE_ASSET_LIST} ] ; then
+        jq .assets <${RELEASE_OBJ_CACHE} >${RELEASE_ASSET_LIST}
+    fi
+    jq -r '.[].name' <${RELEASE_ASSET_LIST} | sort -r \
+    | while read name ; do
+        if expr "${name}" : "${ASSET_REGEX}" >/dev/null ; then
+            id=`jq ".[] | select(.name == \"${name}\") | .id" <${RELEASE_ASSET_LIST}`
+            if [ ":${id}" != ":" ] ; then
+                github-get --type=application/octet-stream "/repos/${GIT_REPO}/releases/assets/${id}" >${RELEASE_ASSET_CACHE}
+            fi
+            break
+        fi
+    done
+    cat "${RELEASE_ASSET_CACHE}" 2>/dev/null
+    exit 0
+fi
+
+if [ "${MODE}" = "patch-release" ] ; then
+    oldData=`jq '{tag_name,target_commitish,name,body,draft,prerelease}' <${RELEASE_OBJ_CACHE}`
+    inData=`jq '{tag_name,target_commitish,name,body,draft,prerelease}'`
+    if [ ":${inData}" = ":" ] ; then
+        echo "${PROG}: JSON input expected" >&2
+        exit 1
+    fi
+    newData=`echo "{}" | jq "${oldData} + ${inData}"`
+    if [ ":${newData}" != "${oldData}" ] ; then
+        path="/repos/${GIT_REPO}/releases/${RELEASE_ID}"
+        vecho "Running github-patch ${path}"
+        echo "${newData}" | github-patch "${path}" >/dev/null || exit 1
+    fi
+    exit 0
+fi
+
+if [ "${MODE}" = "upload-asset" ] ; then
+    if [ ":${ASSET}" = ":" ] ; then
+        ASSET=`basename ${ASSET_FILE}`
+    fi
+
+    POST_ASSET_URL="/repos/${GIT_REPO}/releases"
+    GITHUB_URL="https://uploads.github.com" export GITHUB_URL
+    POSTPATH="${POST_ASSET_URL}/${RELEASE_ID}/assets?name=${ASSET}"
+
+    vecho "Running github-post ${POSTPATH} <${ASSET_FILE}..."
+    resp=`github-post ${POSTPATH} <${ASSET_FILE}` || exit 1
+
+    vecho "Cacheing asset ${ASSET_FILE}..."
+    eval RELEASE_ASSET_CACHE="\"${RELEASE_ASSET_CACHE_EXPR}\""
+    cp "${ASSET_FILE}" "${RELEASE_ASSET_CACHE}"
+
+    exit 0
+fi
+
+exit 0
+
+

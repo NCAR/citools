@@ -1,28 +1,17 @@
 #!/bin/sh
 PROG=docker-cibuild
 DESC="Run \"docker build\" with added labels, produce metadata"
-USAGE1="${PROG} [--metadata=file] <BUILD_OPTS>"
+USAGE1="${PROG} [--metadata=<metadata_file>] [--image-name=<tagless_name>]
+                    [--source-version=<src_vers>]
+                    [--image-qualifier=<img_qual>] <BUILD_OPTS>"
 METADATA_VERSION=1.0.0
 
 HELP_DESC="
-This script passes all arguments with the exception of \"--metadata=*\"
-to \"docker build\" and adds some useful \"--label\" arguments; it also
-captures the output, extracts data from it, and supplements it with
-information from \"docker inspect\" and git; this metadata is written to
-the file named in the --metadata= argument, or to standard output.
-If a semantic version number can be determined, it also tags the image
-with unique tag of the form 
-
-    <semver_num>-<YYYYmmdd>T<HHMMSS>Z[<semver_meta>]
-
-where <semver_num> is the numeric \"major.minor.patch\" portion of the
-semantic version string, and <YYYmmdd>T<HHMMSS>Z is a UTC timestamp
-reflecting the creation time of the image, and <semver_meta> is the
-metadata portion of the semantic version string, with \".\" in place of
-\"+\". For example, given the semantic version string \"1.0.2-beta+build2\"
-and a creation time of 2018-10-28T14:22:13Z, the tag would be
-\"1.0.2-20181028T142213Z.build2\". Note that the build tag is itself
-a valid semantic version string.
+This script runs \"docker build\", adds some useful labels, and applies a
+unique tag to the resulting image. It also captures the build output,
+extracts data from it, supplements it with information from \"docker
+inspect\" and various git commands, and writes this metadata to standard
+output.
 
 Note that this will not work if the -q|--quiet option to \"docker
 build\" is given.
@@ -31,91 +20,123 @@ The following arguments are automatically passed to \"docker build\" in
 addition to any provided arguments:
     --label git.remote.origin=<github_repo_url>
     --label git.revision.sha1=<git_commit_hash>
-    --label version=<semver>
+    --label image.name=<tagless_name>    # see --image-name
+    --label image.qualifier=<img_qual>   # see --image-qualifier
+    --label source.version=<src_vers>    # see --source-version
 
-The script is meant to be executed as part of an automated build when a
-\"release tag\" is assigned to a release. In CircleCI, the release tag is
-available in the CIRCLE_TAG environment variable when a build is
-triggered via a tag. The script will actually check the RELEASE_TAG
-environment variable first, then CIRCLE_TAG. If a release tag is
-provided, it should be a valid semantic version tag.
+Metadata is presented as \"<parameter>=<value>\" definitions, one per line,
+in the given order:
 
-The output from \"docker build\" will be written to standard output. If
-no \"--metadata=file\" argument is given, the metadata will follow.
-In any case, metadata is presented as \"<parameter>=<value>\"
-definitions, one per line, in the given order:
-
-  Parameter         Value
-  ---------         -----
-  METADATA_VERSION  The version of the metadata format; current value is
-                    \"${METADATA_VERSION}\".
-  REMOTE_ORIGIN     The github repo URL
-  REPO_OWNER        The username of the github repo owner
-  REPO_NAME         The name of the github repo
-  REVISION_SHA1     The full sha1 hash of the current git revision
-  VERSION           A version string for the current revision; the
-                    environment variable RELEASE_TAG is used if set,
-                    otherwise the environment variable CIRCLE_TAG is used.
-  IMAGE_CREATED     The ISO8601 UTC creation time of the image (nanosecond
-                    resolution)
-  IMAGE_DIGEST      The digest of the image (with leading \"sha256:\")
-  IMAGE_ID          The first 12 characters of the image digest
-  IMAGE_TAG         The tag assigned to the image by the script, if there
-                    is one. The tag is of the form
-                    <semver_num>-<timestamp>[<semver_meta>] (see
-                    description above.)
-  BASE_TAG          The full (pullable) \"tag name\" of the base image
-  BASE_DIGEST       The full (pullable) \"digest name\" of the base image
-  BASE_REPO_OWNER   The username of the github repo owner of the base image
-                    project, if the base image was built by this script.
-  BASE_REPO_NAME    The name of the github repo of the base image project,
-                    if the base image was built by this script.
-  BASE_VERSION      The release tag of the base image, if the base image
-                    was built by this script.
+  Parameter          Value
+  ---------          -----
+  METADATA_VERSION   The version of the metadata format; current value is
+                     \"${METADATA_VERSION}\".
+  REMOTE_ORIGIN      The github repo URL
+  GIT_REPO           The username and repo name of the github repo, with
+                      a separating \"/\".
+  REVISION_SHA1      The full sha1 hash of the current git revision
+  SOURCE_VERSION     The source version (see --source-version=<src_vers>)
+  IMAGE_CREATED      The ISO8601 UTC creation time of the image
+                     (nanosecond resolution)
+  IMAGE_DIGEST       The digest of the image (with leading \"sha256:\")
+  IMAGE_ID           The first 12 characters of the image digest
+  IMAGE_NAME         The full (registry) docker name, without a tag or
+                      digest (see --image-name=<tagless_name>)
+  IMAGE_QUALIFIER    The image qualifier (see --image-qualifier=<img_qual>)
+  IMAGE_TAG          The unique tag assigned to the image by this script;
+                     it has the form
+                         <src_vers>-<ctime>[.<img_qual>]    
+                     where <ctime> is a compact form of the image creation
+                     time.
+  BASE_TAG           The full (pullable) \"tag name\" of the base image
+  BASE_DIGEST        The full (pullable) \"digest name\" of the base image
+  BASE_REMOTE_ORIGIN The github repo url for the base image, if the base
+                     image was built by this script.
+  BASE_GIT_REPO      The username and repo name of the github repo for the
+                     base image, with a separating \"/\"; only available
+                     if the base image was built by this script.
 "
 HELP_OPTS="
---metadata=file
-    Write image metadata to the named file. If not given write it to
-    standard output.
+--metadata=<metadata_file>
+    If given, the name of a local file into which the image metadata should be
+    written, instead of standard ouptut.
+
+--image-name=<tagless_name>
+    The full name of the image (including its registry, if not dockerhub),
+    without a trailing \":<tag>\" or \"@<digest>\" component. This is
+    required if the IMAGE_NAME environment variable is not set.
+
+--source-version=<src_vers>
+    The version number of the source revision. By convention, this is a
+    normal semantic version string, without a prerelease or metadata parts.
+    It will form part of the unique docker tag for the image, so it must
+    consist of legal tag characters. This is required if the SOURCE_VERSION
+    environment variable is not set.
+
+--image-qualifier=<img_qual>
+    If given, a string that distinguishes the image from other images, or
+    provides build metadata. It will form part of the unique docker tag for
+    the image, so it must consist of legal tag characters. If not given,
+    the IMAGE_QUALIFIER environment variable is used.
+
+<BUILD_OPTS>
+    \"docker build\" options, which are passed through. Including
+    -q|--quiet will cause an error.
 "
 HELP_ENV="
-RELEASE_TAG
-    If given, a (nominally semantic) version tag for the release. If not
-    explicitly set, \$CIRCLE_TAG is used.
+IMAGE_NAME
+    The default for the --image-name argument.
 
-CIRCLE_TAG
-    The active release tag. Set by CircleCI.
+SOURCE_VERSION
+    The default for the --source-version argument.
+
+IMAGE_QUALIFIER
+    The default for the --image-qualifier argument.
 "
 
 SCRIPTDIR=`cd \`dirname $0\`; pwd`
 . ${SCRIPTDIR}/citools-basics.rc || exit 1
 
-# extract --metadata-file=file argument
-METADATA_FILE=
-set x "$@" ====== ; shift
-while [ ":$1" != ":======" ] ; do
-      case $1 in
-          --metadata=*)
-              METADATA_FILE=`expr "$1" : '--metadata=\(.*\)$'`
-              shift ;;
-          *)
-              arg1="$1"
-              shift
-              set x "$@" "${arg1}" ; shift
-      esac
-done
+set : "$@" ====
 shift
-
-version="${RELEASE_TAG:-${CIRCLE_TAG}}"
-if [ ":${version}" != ":" ] ; then
-    set : --label "version=${version}" "$@"
+abort_on_error=:
+METADATA_FILE=
+while [ ":$1" != ":====" ] ; do
+    arg="$1"
     shift
-    SEMVER_NUM=`parse-semver -n "${version}" 2>/dev/null`
-    SEMVER_META=`parse-semver -m "${version}" 2>/dev/null | tr '+' '.'`
-else
-    SEMVER_NUM=
-    SEMVER_META=
+    case ${arg} in
+        --metadata=*)
+            METADATA_FILE=`expr "${arg}" : '--metadata=\(.*\)$'` ;;
+        --image-name=*)
+            IMAGE_NAME=`expr "${arg}" : '--image-name=\(.*\)$'` ;;
+        --source-version=*)
+            SOURCE_VERSION=`expr "${arg}" : '--source-version=\(.*\)$'` ;;
+        --image-qualifier=*)
+            IMAGE_QUALIFIER=`expr "${arg}" : '--image-qualifier=\(.*\)$'` ;;
+        *)
+            set : "$@" "${arg}"
+            shift ;;
+    esac
+done 
+shift
+if [ ":${IMAGE_NAME}" == ":" ] ; then
+    echo "${PROG}: --image-name argument is required" >&2
+    abort_on_error='exit 1'
 fi
+if [ ":${SOURCE_VERSION}" == ":" ] ; then
+    echo "${PROG}: --source-version argument is required" >&2
+    abort_on_error='exit 1'
+elif expr "${SOURCE_VERSION}" : '.*[^-._0-9a-zA-Z].*' >/dev/null ; then
+    echo "${PROG}: Invalid source version string: ${SOURCE_VERSION}" >&2
+    abort_on_error='exit 1'
+fi
+if expr "${IMAGE_QUALIFIER}" : '.*[^-._0-9a-zA-Z].*' >/dev/null ; then
+    echo "${PROG}: Invalid image qualifier string: ${IMAGE_QUALIFIER}" >&2
+    abort_on_error='exit 1'
+elif expr "${IMAGE_QUALIFIER}" : '[^-].*' >/dev/null ; then
+    IMAGE_QUALIFIER="-${IMAGE_QUALIFIER}"
+fi
+eval $abort_on_error
 
 toplevel=`git rev-parse --show-toplevel 2>/dev/null`
 
@@ -123,7 +144,11 @@ if [ ":$toplevel" != ":" ] ; then
     gitRemoteOrigin=`git config --get remote.origin.url`
     gitRevisionSha1=`git rev-list HEAD | head -1`
     set : --label "git.remote.origin=${gitRemoteOrigin}" \
-          --label "git.revision.sha1=${gitRevisionSha1}" "$@"
+          --label "git.revision.sha1=${gitRevisionSha1}" \
+          --label "image.name=${IMAGE_NAME}" \
+          --label "image.qualifier=${IMAGE_QUALIFIER}" \
+          --label "source.version=${SOURCE_VERSION}" \
+"$@"
     shift
 fi
 
@@ -169,61 +194,44 @@ fi
 set : ${imageInfo}
 imageDigest="$2"
 imageCreated="$3"
+imageCtime=`echo ${imageCreated} | sed -e 's/[-:]//g' -e 's/\.[0-9]*Z$/Z/'`
 
-baseTag= baseDigest= baseRemoteOrigin= baseVersion=
+baseTag= baseDigest= baseRemoteOrigin=
 if [ ":${baseId}" != ":" ] ; then
-    baseInfo=`docker inspect --format='{{index .RepoTags 0}} {{index .RepoDigests 0}} {{index .Config.Labels "git.remote.origin"}} {{index .Config.Labels "version"}}' ${baseId}`
+    baseInfo=`docker inspect --format='{{index .RepoTags 0}} {{index .RepoDigests 0}} {{index .Config.Labels "git.remote.origin"}}' ${baseId}`
     if [ ":${baseInfo}" != ":" ] ; then
         set : ${baseInfo}
         baseTag="$2"
         baseDigest="$3"
         baseRemoteOrigin="$4"
-        baseVersion="$5"
     fi
 fi
+gitRepo=`expr "${gitRemoteOrigin}" : '.*[:/]\([^:/][^:/]*/[^:/][^:/]*\)\.git$'`
+baseGitRepo=`expr "${baseRemoteOrigin}" : '.*[:/]\([^:/][^:/]*/[^:/][^:/]*\)\.git$'`
 
-# Split out owners and repo names from remote git URLs.
-IFS_SAVE="${IFS}"
-IFS="${IFS}/:"
-eval set : ${gitRemoteOrigin} ; shift
-while [ $# -gt 2 ] ; do shift ; done
-repoOwner="$1"
-repoName=`basename "$2" .git`
-eval set : ${baseRemoteOrigin} ; shift
-while [ $# -gt 2 ] ; do shift ; done
-baseRepoOwner="$1"
-baseRepoName=`basename "$2" .git`
-IFS="${IFS_SAVE}"
-
-# Create unique tag if possible and tag the image
-imageTag=
-if [ ":${SEMVER_NUM}" != ":" ] ; then
-    tagTstamp=`echo "$imageCreated" | sed -e 's/[-:]//g' -e 's/\..*Z/Z/'`
-    imageTag="${SEMVER_NUM}-${tagTstamp}${SEMVER_META}"
-
-    docker tag ${imageId} ${repoName}:${imageTag}
-fi
+imageTag="${SOURCE_VERSION}-${imageCtime}${IMAGE_QUALIFIER}"
+imageTaggedName="${IMAGE_NAME}:${imageTag}"
+docker tag "${imageId}" "${imageTaggedName}" || exit 1
 
 if [ ":${METADATA_FILE}" != ":" ] ; then
     exec >"${METADATA_FILE}"
 fi
-
 cat <<EOF
 METADATA_VERSION=$METADATA_VERSION
 REMOTE_ORIGIN=$gitRemoteOrigin
-REPO_OWNER=$repoOwner
-REPO_NAME=$repoName
+GIT_REPO=$gitRepo
 REVISION_SHA1=$gitRevisionSha1
-VERSION=$version
+SOURCE_VERSION=$SOURCE_VERSION
 IMAGE_CREATED=$imageCreated
 IMAGE_DIGEST=$imageDigest
 IMAGE_ID=$imageId
+IMAGE_NAME=$IMAGE_NAME
+IMAGE_QUALIFIER=$IMAGE_QUALIFIER
 IMAGE_TAG=$imageTag
 BASE_TAG=$baseTag
 BASE_DIGEST=$baseDigest
-BASE_REPO_OWNER=$baseRepoOwner
-BASE_REPO_NAME=$baseRepoName
-BASE_VERSION=$baseVersion
+BASE_REMOTE_ORIGIN=$baseRemoteOrigin
+BASE_GIT_REPO=$baseGitRepo
 EOF
 
 exit 0

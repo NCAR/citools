@@ -1,0 +1,38 @@
+#!/bin/sh
+PROG=check-envvars
+DESC="Verify that the indicated environment variables are set"
+USAGE1="${PROG} [--prog=<progname>] <envvars>"
+
+HELP_DESC="
+This is meant to be used in scripts that expect certain environment
+variables to be set.
+"
+HELP_OPTS="
+--prog=<prog>
+    The name of the invoking script; this name is used in error messages
+    instead of \"${PROG}\".
+"
+
+SCRIPTDIR=`cd \`dirname $0\`; pwd`
+. ${SCRIPTDIR}/citools-basics.rc || exit 1
+
+prog="${PROG}"
+case $1 in
+    --prog=*)
+        prog=`expr "$1" : '--prog=\(.*\)$'`
+        shift ;;
+    -*)
+        echo "${PROG}: Unknown option: $1" >&2
+        exit 1 ;;
+esac
+finally=:
+for envvar in "$@" ; do
+    eval val=\"\$"${envvar}"\"
+    if [ ":${val}" = ":" ] ; then
+        echo "${prog}: environment variable \"${envvar}\" is not set" >&2
+        finally="exit 1"
+    else
+        vecho "${envvar}=\"${val}\""
+    fi
+done
+eval $finally

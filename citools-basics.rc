@@ -77,6 +77,7 @@ if [ ":${SCRIPTDIR}" = ":" ] ; then
     SCRIPTDIR=`cd \`dirname $0\`; pwd`
 fi
 
+
 PATH="${SCRIPTDIR}:/usr/local/bin:/usr/local/sbin:/bin:/sbin:/usr/bin:/usr/sbin"
 export PATH
 

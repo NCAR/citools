@@ -1,0 +1,16 @@
+#!/bin/sh
+PROG=citools
+DESC="CITools check script"
+USAGE1="${PROG}"
+
+HELP_DESC="
+This script just print out the current citools version. It can be used to
+check if citools has been installed.
+"
+
+set : "$@" --version
+shift
+SCRIPTDIR=`cd \`dirname $0\`; pwd`
+. ${SCRIPTDIR}/citools-basics.rc || exit 1
+
+exit 0

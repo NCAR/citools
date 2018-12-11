@@ -1,16 +1,26 @@
 #!/bin/sh
 PROG=citools-docgen
-DESC="Generate citools documentation"
+DESC="Generate documentation from --help output"
 USAGE1="${PROG} docdir"
+
+REPO_DEFAULT="NCAR/citools"
 
 HELP_DESC="
 This script creates documentation pages in the GitHub citools wiki. It
 creates man-like text documents by invoking each script with its --help
 option, and a markdown index file with links to the text documents.
+
+Other repos that use the same scripting conventions as citools can use
+this script as well.
 "
 HELP_ARGS="
 docdir
     The output directory.
+"
+HELP_ENV="
+REPO
+    The owner/repo name of the target script repository. Default is
+    \"${REPO_DEFAULT}\".
 "
 HELP_FILES="
 index.md
@@ -23,7 +33,9 @@ index.md
 SCRIPTDIR=`cd \`dirname $0\`; pwd`
 . ${SCRIPTDIR}/citools-basics.rc || exit 1
 
-WIKI_URL="https://github.com/NCAR/citools/wiki"
+REPO=${REPO:=${REPO_DEFAULT}} export REPO
+REPONAME=`expr "${REPO}" : '[^/]*/\(.*\)$'`
+WIKI_URL="https://github.com/${REPO}/wiki"
 
 DOCDIR="$1"
 if [ ":$DOCDIR" = ":" ] ; then
@@ -65,9 +77,9 @@ find . -type f ! -name '*~' -perm -0005 -exec grep -l '^PROG=' {} \; \
 done
 
 cat >${INDEXFILE} <<EOF
-Welcome to the citools wiki!
+Welcome to the ${REPONAME} wiki!
 
-Most documents in the wiki are generated automatically when a change is
+Many documents in the wiki are generated automatically when a change is
 committed. These documents are simply snapshots of each script's `--help`
 documentation.
 

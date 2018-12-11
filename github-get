@@ -1,7 +1,10 @@
 #!/bin/sh
 PROG="github-get"
 DESC="Submit a GET request to the GitHub API"
-USAGE1="${PROG} path"
+USAGE1="${PROG} [--type=<content_type] path"
+
+CONTENT_TYPE="application/vnd.github.v3+json"
+
 HELP_DESC="
 Submit a GET request to the GitHub API.
 
@@ -12,6 +15,10 @@ returned. If the HTTP response status is 200, the response header is
 discarded, the body is written to standard output, and 0 is returned.
 
 The \"path\" argument is 
+"
+HELP_OPTS="
+--type=<content_type>
+    An alternate content type to use (default is ${CONTENT_TYPE})
 "
 HELP_ARGS="
 path
@@ -29,35 +36,60 @@ SCRIPTDIR=`cd \`dirname $0\`; pwd`
 . ${SCRIPTDIR}/citools-basics.rc || exit 1
 
 GITHUB_URL="${GITHUB_URL:-https://api.github.com}"
-
-case $1 in
-    /*)
-        URL_PATH="$@" ;;
-    *)
-        URL_PATH="/$@" ;;
-esac
+while [ $# != 0 ] ; do
+    case $1 in
+        --type=*)
+            CONTENT_TYPE=`expr "$1" : '--type=\(.*\)$'` ;;
+        -*)
+            echo "${PROG}: invalid option: $1" >&2
+            exit 1 ;;
+        /*)
+            URL_PATH="$@" ;;
+        *)
+            URL_PATH="/$@" ;;
+    esac
+    shift
+done
 URL="${GITHUB_URL}${URL_PATH}"
-
+#
+# Note: We are handling redirects ourselves rather than using the curl -L flag
+# because some redirects (specifically to AWS S3) cause curl to fail
+#
 vecho "Requesting GET from URL ${URL}..."
-response=`curl -is -L \
-     -H "Accept: application/vnd.github.v3+json" \
+response=`curl -is \
+     -H "Accept: ${CONTENT_TYPE}" \
      -H "Authorization: token ${GH_TOKEN}" \
+     -H "Cache-Control: no-cache" \
      "${URL}"`
-
-statusline=`echo "${response}" | head -1`
-case $statusline in
-    *404*)
-        # This must be a non-release tag.
-        echo "${PROG}: Not found ($URL_PATH)" >&2
-        exit 1 ;;
-    *2[0-9][0-9]*)
-        # If the request succeeded, strip out the HTTP response header and
-        # output the body
-        echo "${response}" | sed -n -e '/^[[{].*/,$p' ;;
-    *)
-        echo "${PROG}: api GET request failed" >&2
-        echo "${response}" >&2
-        exit 1 ;;
-esac
-
+rc=$?
+if [ $rc != 0 ] ; then
+    echo "${PROG}: curl error $rc" >&2
+    exit $rc
+fi
+for try in 1 2 3 4 5 ; do
+    statusline=`echo "${response}" | head -1`
+    case $statusline in
+        *302*)
+            URL=`echo "${response}" | sed -n 's/^[lL]ocation: *\(.*\)/\1/p' | tr -d '\r'`
+            vecho "Requesting GET from URL ${URL}"
+            response=`curl -is "${URL}"`
+            rc=$?
+            if [ $rc != 0 ] ; then
+                echo "${PROG}: curl error $rc" >&2
+                exit $rc
+            fi ;;
+        *404*)
+            echo "${PROG}: Not found ($URL)" >&2
+            exit 1 ;;
+        *2[0-9][0-9]*)
+            # If the request succeeded, strip out the HTTP response header and
+            # output the body
+            echo "${response}" | tr -d '\r' | sed -e '1,/^ *$/d'
+            exit 0 ;;
+        *)
+            echo "${PROG}: api GET request failed" >&2
+            echo "${response}" >&2
+            exit 1 ;;
+    esac
+done
 exit 0

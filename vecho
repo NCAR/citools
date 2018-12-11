@@ -14,7 +14,7 @@ CITOOLS_VERBOSE
 SCRIPTDIR=`cd \`dirname $0\`; pwd`
 . ${SCRIPTDIR}/citools-basics.rc || exit 1
 
-if truthy "${CITOOLS_VERBOSE}" ; then
+if [ ":${CITOOLS_VERBOSE}" != ":" ] ; then
     echo "$@" >&2
 fi
 exit 0
