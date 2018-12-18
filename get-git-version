@@ -58,30 +58,28 @@ vecho "Commit SHA1: $COMMIT"
 
 uncomm=`git status ${UNO} -s`
 
+version="0.0.1"
 if test ":$uncomm" != ":" ; then
     vecho "There are uncommitted changes to this repo - using dev version:"
     vecho "$uncomm"
 else
-    version=`git tag --list --points-at "${COMMIT}" | ${SCRIPTDIR}/versions -c`
-    if test ":$version" != ":" ; then
-        vecho "Current commit has a semantic version tag"
-        echo "version=$version"
+    currver=`git tag --list --points-at "${COMMIT}" | ${SCRIPTDIR}/versions -c`
+    if test ":${currver}" != ":" ; then
+        vecho "Current commit has a semantic version tag: ${currver}"
+        echo "${currver}"
         exit 0
+    fi
+    vecho "Current commit does not have a semantic version tag"
+    basever=`git tag --list --no-contains "${COMMIT}" | ${SCRIPTDIR}/versions -c`
+    if test ":${basever}" = ":" ; then
+        vecho "No base version tag found - using ${version}"
     else
-        vecho "Current commit does not have a semantic version tag"
+        vecho "Found base version tag; incrementing ${basever}"
+        version=`echo ${basever} | versions -i`
     fi
 fi
 
-version=`git tag --list --points-at "${COMMIT}" | ${SCRIPTDIR}/versions -i`
-if test ":$version" = ":" ; then
-    version=`git tag --list --no-contains "${COMMIT}" | ${SCRIPTDIR}/versions -i`
-    if test ":$version" = ":" ; then
-        version="0.0.1"
-        exit 0
-    else
-        vecho "Found/incremented semantic version tag: $version"
-    fi
-fi
 tstamp=`date -u +%Y%m%dT%H%M%SZ`
 echo "${version}-${tstamp}.dev"
+exit 0
 
