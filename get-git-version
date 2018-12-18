@@ -69,7 +69,7 @@ else
     currver=`git tag --list --points-at "${COMMIT}" | ${SCRIPTDIR}/versions -c`
     if test ":${currver}" != ":" ; then
         vecho "Current commit has a semantic version tag: ${currver}"
-        echo "${currver}"
+        parse-semver -n "${currver}"
         exit 0
     fi
     suffix=`expr "${COMMIT}" : '\(.......\).*'`
@@ -80,7 +80,7 @@ else
         vecho "No base version tag found - using ${version}"
     else
         vecho "Found base version tag; incrementing ${basever}"
-        version=`echo ${basever} | versions -i`
+        version=`parse-semver -n ${basever} | versions -i`
     fi
 fi
 tstamp=`date -u +%Y%m%dT%H%M%SZ`
