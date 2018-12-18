@@ -66,7 +66,7 @@ reg="${IMAGE_REGISTRY:-${IMAGE_REGISTRY_DEFAULT}}"
 IMAGE_REGISTRY=`echo "${reg}" | sed -e 's:/*$::'`
 IMAGE_REPO="${IMAGE_REPO:-${IMAGE_REPO_DEFAULT}}"
 IMAGE_NAME="${IMAGE_NAME:-${IMAGE_NAME_DEFAULT}}"
-if [ ":${IMAGE_NAME}" == ":" ] ; then
+if [ ":${IMAGE_NAME}" = ":" ] ; then
     gitRemoteOrigin=`git config --get remote.origin.url 2>/dev/null`
     if [ ":${gitRemoteOrigin}" == ":" ] ; then
         echo "${PROG}: --image-name argument is required" >&2
