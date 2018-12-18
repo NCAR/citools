@@ -1,18 +1,25 @@
 #!/bin/sh
 PROG=github-release-util
 DESC="Utility for managing GitHub \"release\" object"
-USAGE1="${PROG} --download-asset=<regex> [--cache=<dir>] [<release_tag>]"
-USAGE2="${PROG} --get-releases [--cache=<dir>]"
-USAGE3="${PROG} --get-release [--cache=<dir>] [<release_tag>]"
-USAGE4="${PROG} --patch-release [--cache=<dir>] [<release_tag>]"
-USAGE5="${PROG} --purge-cache [--cache=<dir>]"
-USAGE6="${PROG} --upload-asset=<file_name> [--asset=<name>] [--cache=<dir>]
+USAGE1="${PROG} --create-release"
+USAGE2="${PROG} --download-asset=<regex> [--cache=<dir>] [<release_tag>]"
+USAGE3="${PROG} --get-releases [--cache=<dir>]"
+USAGE4="${PROG} --get-release [--cache=<dir>] [<release_tag>]"
+USAGE5="${PROG} --patch-release [--cache=<dir>] [<release_tag>]"
+USAGE6="${PROG} --purge-cache [--cache=<dir>]"
+USAGE7="${PROG} --upload-asset=<file_name> [--asset=<name>] [--cache=<dir>]
                         [<release_tag>]"
 
 HELP_DESC="
 This script supports various operations on GitHub \"release\" objects.
 "
 HELP_OPTS="
+--create-release
+    Create a release using a JSON object read from standard input. 
+    The object should contain the following members: tag_name,
+    target_commitish, name, body, draft, and prerelease. Any other members
+    are ignored.
+
 --download-asset=<regex>
     Download the indicated asset; select the first asset with a name
     matching the given pattern. The pattern must be a simple regular
@@ -98,6 +105,8 @@ while [ $# != 0 ] ; do
             ASSET=`expr "$1" : '--asset=\(.*\)$'` ;;
         --cache=*)
             CACHEDIR=`expr "$1" : '--cache=\(.*\)$'` ;;
+        --create-release)
+            MODE=create-release ;;
         --download-asset=*)
             MODE=download-asset
             ASSET_REGEX=`expr "$1" : '--download-asset=\(.*\)$'` ;;
@@ -129,9 +138,12 @@ if [ ":${MODE}" = ":" ] ; then
     echo "${USAGE}" >&2
     exit 1
 fi
-if [ "${MODE}" != "get-releases" ] && [ ":${RELEASE_TAG}" = ":" ] ; then
-    echo "${PROG}: release tag is required" >&2
-    exit 1
+
+if [ "${MODE}" != "get-releases" ] && [ "${MODE}" != "create-release" ] ; then
+    if [ ":${RELEASE_TAG}" = ":" ] ; then
+        echo "${PROG}: release tag is required" >&2
+        exit 1
+    fi
 fi
 if [ ":${GH_TOKEN}${GH_USER}" = ":" ] ; then
     echo "${PROG}: one of GH_TOKEN or GH_USER must be set" >&2
@@ -154,6 +166,22 @@ if [ ${MODE} = purge-cache ] ; then
     rm -rf `dirname ${REPO_CACHE}`
     exit 0
 fi
+if [ "${MODE}" = "create-release" ] ; then
+    inDataRaw=`cat`
+    vecho "stdin: '${inDataRaw}'"
+    inData=`echo "${inDataRaw}" | jq '{tag_name,target_commitish,name,body,draft,prerelease}'`
+    if [ ":${inData}" = ":" ] ; then
+        echo "${PROG}: JSON input expected" >&2
+        echo "Input data: '${inDataRaw}'" >&2
+        exit 1
+    fi
+    RELEASE_TAG=`echo "${inDataRaw}" | jq -r '.tag_name'`
+    if [ ":${RELEASE_TAG}" = ":" ] ; then
+        echo "${PROG}: tag_name is required" >&2
+        exit 1
+    fi
+fi
+
 RELEASE_CACHE="${REPO_CACHE}/${RELEASE_TAG}"
 mkdir -p "${RELEASE_CACHE}" || exit 1
 
@@ -164,9 +192,18 @@ RELEASE_OBJ_CACHE="${RELEASE_CACHE}/release.json"
 RELEASE_ID_CACHE="${RELEASE_CACHE}/release_id"
 RELEASE_ID=`cat ${RELEASE_ID_CACHE} 2>/dev/null`
 
+if [ "${MODE}" = "create-release" ] ; then
+    path="/repos/${GH_REPO}/releases"
+    vecho "Running github-post ${path}"
+    echo "${inData}" | github-post "${path}" >${RELEASE_OBJ_CACHE} || exit 1
+fi
+
 if [ ! -s ${RELEASES_CACHE} ] ; then
     vecho "Running github-get /repos/${GH_REPO}/releases >${RELEASES_CACHE}"
     github-get "/repos/${GH_REPO}/releases" >${RELEASES_CACHE} || exit 1
+fi
+if [ "${MODE}" = "create-release" ] ; then
+    exit 0
 fi
 if [ "${MODE}" = "get-releases" ] ; then
     cat ${RELEASES_CACHE} || exit 1
