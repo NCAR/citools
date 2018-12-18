@@ -23,8 +23,8 @@ SCRIPTDIR=`cd \`dirname $0\`; pwd`
 if [ ":$1" = ":--force" ] ; then
     shift
 else
-    check_aws=`type aws 2>/dev/null`
-    if [ ":${check_aws}" != ":" ] ; then
+    check_aws=`type aws 2>&1`
+    if [ $? = 0 ] ; then
         vecho "${check_aws}"
         exit 0
     fi

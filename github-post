@@ -1,16 +1,24 @@
 #!/bin/sh
 PROG="github-post"
-DESC="Submit a POST request to the GitHub API"
-USAGE1="${PROG} path"
+DESC="Submit a POST or PUT request to the GitHub API"
+USAGE1="${PROG} [--put] path"
 HELP_DESC="
-Submit a POST request to the GitHub API. The body of the request is read
-from standard input.
+Submit a POST (or PUT) request to the GitHub API. The body of the request is
+read from standard input.
 
 If the HTTP response status is 404, a \"Not found\" message is emitted and 1
 is returned. If the HTTP response status is another non-200 status, the
 entire response header and body are written to standard error and 1 is
 returned. If the HTTP response status is 200, the response header is
 discarded, the body is written to standard output, and 0 is returned.
+"
+HELP_OPTS="
+--put
+    Submit a PUT rather than a POST.
+
+--user=<github_user>
+    Use basic authentication with the given user. Required if the GH_TOKEN
+    environment variable is not set.
 "
 HELP_ARGS="
 path
@@ -22,29 +30,50 @@ GITHUB_URL
    If not given, \"https://api.github.com\" is used.
 
 GH_TOKEN
-   A GitHub Personal API Token that will be used to authenticate.
+   If given, a GitHub Personal API Token that will be used to authenticate.
+
+GH_USER
+   If given, use basic authentication with the given user. Required if
+   GH_TOKEN is not set.
 "
 SCRIPTDIR=`cd \`dirname $0\`; pwd`
 . ${SCRIPTDIR}/citools-basics.rc || exit 1
 
 GITHUB_URL="${GITHUB_URL:-https://api.github.com}"
 
-case $1 in
-    /*)
-        URL_PATH="$@" ;;
-    *)
-        URL_PATH="/$@" ;;
-esac
+TYPE=POST
+while [ $# != 0 ] ; do
+    case $1 in
+        --put)
+            TYPE=PUT ;;
+        /*)
+            URL_PATH="$@" ;;
+        *)
+            URL_PATH="/$@" ;;
+    esac
+    shift
+done
+if [ ":${GH_TOKEN}${GH_USER}" = ":" ] ; then
+    echo "${PROG}: one of GH_TOKEN or GH_USER must be set" >&2
+    exit 1
+fi
+
 URL="${GITHUB_URL}${URL_PATH}"
 
 payload=`cat`
 
-response=`curl -is -L -X POST \
+set curl -is -L -X $TYPE \
      -H "Content-Type: application/json" \
-     -H "Accept: application/vnd.github.v3+json" \
-     -H "Authorization: token ${GH_TOKEN}" \
+     -H "Accept: application/vnd.github.v3+json"
+if [ ":${GH_TOKEN}" != ":" ] ; then
+    set "$@" -H "Authorization: token ${GH_TOKEN}"
+else
+    set "$@" -u ${GH_USER}
+fi
+set "$@" \
      --data-binary "${payload}" \
-     "${URL}"` || exit 1
+     "${URL}"
+response=`"$@"` || exit 1
 
 statusline=`echo "${response}" | head -1`
 case $statusline in
@@ -53,7 +82,7 @@ case $statusline in
         # output the body
         echo "${response}" | sed -n '/^{/,$p' ;;
     *)
-        echo "${PROG}: api patch request failed" >&2
+        echo "${PROG}: api $TYPE request failed" >&2
         echo "${response}" >&2
         exit 1 ;;
 esac

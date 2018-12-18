@@ -6,10 +6,8 @@ HELP_DESC="
 This script prints a \"docker login\" command that can be used to
 log in to an indicated docker registry.
 
-If a command-line argument is given, it can be a remote image name
-or a registry type. Supported registry types are \"ecr\" and
-\"dockerhub\". If no argument is provided on the command line,
-environment variables are examined to determine the registry type: if
+If no registry_type or remote_image_name argument is provided on the command
+line, environment variables are examined to determine the registry type: if
 AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY are set, the default registry
 type is \"ecr\"; otherwise, if DOCKERHUB_USERNAME and DOCKERHUB_PASSWORD
 are set, the default registry type is \"dockerhub\".
@@ -17,6 +15,13 @@ are set, the default registry type is \"dockerhub\".
 HELP_OPTS="
 --show-type
     Instead of printing a docker command, print the chosen registry type.
+"
+HELP_ARGS="
+registry_type
+    Either \"ecr\" or \"dockerhub\" (upper or lower case).
+
+remote_image_name
+    A remote image name.
 "
 HELP_ENV="
 DOCKERHUB_DOCKER_LOGIN
@@ -61,11 +66,11 @@ case $1 in
         elif [ $can_use_dockerhub = yes ] ; then
             registry=dockerhub
         fi ;;
-    ecr)
+    ecr|ECR)
         registry=ecr ;;
     *.ecr.*)
         registry=ecr ;;
-    dockerhub)
+    dockerhub|DOCKERHUB)
         registry=dockerhub ;;
     *)
         registry=dockerhub ;;

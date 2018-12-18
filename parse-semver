@@ -1,7 +1,7 @@
 #!/bin/sh
 PROG="parse-semver"
 DESC="Parse semantic version strings"
-USAGE1="${PROG} [-n] [-p] [-m] [-i] version_str"
+USAGE1="${PROG} [-i] [-n] [-p] [-m] [-v] version_str"
 
 HELP_DESC="
 This script parses a given supposed semantic version string and writes
@@ -13,6 +13,9 @@ Note that a leading \"v\" or \"V\" in the input string is allowed, but
 ignored.
 "
 HELP_OPTS="
+-i
+    Print the input string (if it is valid).
+
 -n
     Print the numeric component (major.minor.patch).
 
@@ -22,8 +25,8 @@ HELP_OPTS="
 -m
     Print the metadata component, with its leading \"+\".
 
--i
-    Print the input string (if it is valid).
+-v
+    Print major.minor.patch, major.minor, and major as separate string.
 
 When more than one of the -n, -p, -m options are given, the components
 are printed consecutively with no intervening spaces. For example,
@@ -32,6 +35,9 @@ are printed consecutively with no intervening spaces. For example,
 
 If -i is given along with -n, -p, or -m, its value is always written
 before the other components and separated from them by a space.
+
+If -v is given along with -n, -p, or -m, its value is always written
+after the other components and separated from them by a space.
 "
 
 SCRIPTDIR=`cd \`dirname $0\`; pwd`
@@ -43,6 +49,7 @@ METADATA=n
 INVAL=n
 SEMVER=
 ENV=
+VERSIONS=
 while [ $# != 0 ] ; do
     arg="$1"
     shift
@@ -52,14 +59,16 @@ while [ $# != 0 ] ; do
           rest=`expr "$arg" : '-.\(.*\)'`
           set : "${narg}" "-${rest}" "$@"
           shift ;;
+      -i)
+        INVAL=y ;;
       -n)
         NUMERIC=y ;;
       -p)
         PRERELEASE=y ;;
       -m)
         METADATA=y ;;
-      -i)
-        INVAL=y ;;
+      -v)
+        VERSIONS=y ;;
       -*)
         echo "{$PROG}: unknown option: $1" >&2
         exit 1 ;;
@@ -98,6 +107,12 @@ if [ $INVAL = y ] ; then
     set "$@" "${SEMVER}"
 fi
 set "$@" ${OUTVAL}
+if [ ":${VERSIONS}" = ":y" ] ; then
+    MMP=`expr "${SEMVER}" : '[vV]*\([^-+]*\).*'`
+    MM=`expr "${MMP}" : '\([0-9]*\.[0-9]*\)\..*'`
+    M=`expr "${MM}" : '\([0-9]*\)\..*'`
+    set "$@" ${MMP} "${MM}" "${M}"
+fi
 shift
 if [ $# != 0 ] ; then
     echo "$@"

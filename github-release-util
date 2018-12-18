@@ -40,11 +40,14 @@ HELP_OPTS="
 --upload-asset=<file_name>
     Upload the named file as an asset to the release. The name of the
     asset will be the basename of the file, unless the --asset option
-    is also given,
+    is also given.
 
 --asset
     When used with --upload-asset, the name to assign to the asset,
-    instead of the basename of the uploaded file.
+    instead of the basename of the uploaded file. Note that GitHub has
+    restrictions on asset names and silently maps illegal characters to
+    \".\" on upload. To be safe, you should only use alphanumerics,
+    \"-\", \"_\", and \".\" in asset names.
 
 --cache=<dir>
     The name of a directory in which release info will be cached. If not
@@ -61,7 +64,11 @@ HELP_ENV="
 GH_TOKEN
    A GitHub Personal API Token that will be used to authenticate.
 
-GIT_REPO
+GH_USER
+   If given, use basic authentication with the given user. Required if
+   GH_TOKEN is not set.
+
+GH_REPO
     The target Github username and repository name, with a separating
     \"/\". If not set, the value is derived using \"git config --get
     remote.origin.url\"
@@ -126,19 +133,23 @@ if [ "${MODE}" != "get-releases" ] && [ ":${RELEASE_TAG}" = ":" ] ; then
     echo "${PROG}: release tag is required" >&2
     exit 1
 fi
+if [ ":${GH_TOKEN}${GH_USER}" = ":" ] ; then
+    echo "${PROG}: one of GH_TOKEN or GH_USER must be set" >&2
+    exit 1
+fi
 export CACHEDIR
-check-envvars --prog=${PROG} GH_TOKEN CACHEDIR
+check-envvars --prog=${PROG} CACHEDIR
 
 vecho "MODE=${MODE}"
 
-if [ ":${GIT_REPO}" ] ; then
+if [ ":${GH_REPO}" = ":" ] ; then
     gro=`git config --get remote.origin.url`
-    GIT_REPO=`expr "${gro}" : '.*[:/]\([^:/][^:/]*/[^:/][^:/]*\)\.git$'`
-    export GIT_REPO
+    GH_REPO=`expr "${gro}" : '.*[:/]\([^:/][^:/]*/[^:/][^:/]*\)\.git$'`
+    export GH_REPO
 fi
-vecho "GIT_REPO=${GIT_REPO}"
+vecho "GH_REPO=${GH_REPO}"
 
-REPO_CACHE="${CACHEDIR}/${GIT_REPO}"
+REPO_CACHE="${CACHEDIR}/${GH_REPO}"
 if [ ${MODE} = purge-cache ] ; then
     rm -rf `dirname ${REPO_CACHE}`
     exit 0
@@ -148,13 +159,14 @@ mkdir -p "${RELEASE_CACHE}" || exit 1
 
 RELEASES_CACHE="${REPO_CACHE}/releases.json"
 RELEASE_ASSET_LIST="${RELEASE_CACHE}/release_assets.json"
+RELEASE_ASSET_CACHE="${RELEASE_CACHE}/release_asset.json"
 RELEASE_OBJ_CACHE="${RELEASE_CACHE}/release.json"
 RELEASE_ID_CACHE="${RELEASE_CACHE}/release_id"
 RELEASE_ID=`cat ${RELEASE_ID_CACHE} 2>/dev/null`
 
 if [ ! -s ${RELEASES_CACHE} ] ; then
-    vecho "Running github-get /repos/${GIT_REPO}/releases >${RELEASES_CACHE}"
-    github-get "/repos/${GIT_REPO}/releases" >${RELEASES_CACHE} || exit 1
+    vecho "Running github-get /repos/${GH_REPO}/releases >${RELEASES_CACHE}"
+    github-get "/repos/${GH_REPO}/releases" >${RELEASES_CACHE} || exit 1
 fi
 if [ "${MODE}" = "get-releases" ] ; then
     cat ${RELEASES_CACHE} || exit 1
@@ -199,11 +211,12 @@ if [ "${MODE}" = "download-asset" ] ; then
         jq .assets <${RELEASE_OBJ_CACHE} >${RELEASE_ASSET_LIST}
     fi
     jq -r '.[].name' <${RELEASE_ASSET_LIST} | sort -r \
-    | while read name ; do
+     | while read name ; do
         if expr "${name}" : "${ASSET_REGEX}" >/dev/null ; then
             id=`jq ".[] | select(.name == \"${name}\") | .id" <${RELEASE_ASSET_LIST}`
             if [ ":${id}" != ":" ] ; then
-                github-get --type=application/octet-stream "/repos/${GIT_REPO}/releases/assets/${id}" >${RELEASE_ASSET_CACHE}
+                vecho "Running \"github-get --type=application/octet-stream /repos/${GH_REPO}/releases/assets/${id}\"..."
+                github-get --type=application/octet-stream "/repos/${GH_REPO}/releases/assets/${id}" >${RELEASE_ASSET_CACHE}
             fi
             break
         fi
@@ -214,14 +227,19 @@ fi
 
 if [ "${MODE}" = "patch-release" ] ; then
     oldData=`jq '{tag_name,target_commitish,name,body,draft,prerelease}' <${RELEASE_OBJ_CACHE}`
-    inData=`jq '{tag_name,target_commitish,name,body,draft,prerelease}'`
+    inDataRaw=`cat`
+    vecho "stdin: '${inDataRaw}'"
+    inData=`echo "${inDataRaw}" | jq '{tag_name,target_commitish,name,body,draft,prerelease}'`
     if [ ":${inData}" = ":" ] ; then
         echo "${PROG}: JSON input expected" >&2
+        echo "Input data: '${inDataRaw}'" >&2
         exit 1
     fi
+    vecho "oldData: '${oldData}'"
     newData=`echo "{}" | jq "${oldData} + ${inData}"`
+    vecho "newData: '${newData}'"
     if [ ":${newData}" != "${oldData}" ] ; then
-        path="/repos/${GIT_REPO}/releases/${RELEASE_ID}"
+        path="/repos/${GH_REPO}/releases/${RELEASE_ID}"
         vecho "Running github-patch ${path}"
         echo "${newData}" | github-patch "${path}" >/dev/null || exit 1
     fi
@@ -233,7 +251,7 @@ if [ "${MODE}" = "upload-asset" ] ; then
         ASSET=`basename ${ASSET_FILE}`
     fi
 
-    POST_ASSET_URL="/repos/${GIT_REPO}/releases"
+    POST_ASSET_URL="/repos/${GH_REPO}/releases"
     GITHUB_URL="https://uploads.github.com" export GITHUB_URL
     POSTPATH="${POST_ASSET_URL}/${RELEASE_ID}/assets?name=${ASSET}"
 

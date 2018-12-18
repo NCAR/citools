@@ -14,6 +14,10 @@ HELP_ENV="
 GH_TOKEN
     A GitHub Personal Access Token that allows read access to the target
     repo.
+
+GH_USER
+   If given, use basic authentication with the given user. Required if
+   GH_TOKEN is not set.
 "
 SCRIPTDIR=`cd \`dirname $0\`; pwd`
 . ${SCRIPTDIR}/citools-basics.rc || exit 1

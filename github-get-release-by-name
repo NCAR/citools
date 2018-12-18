@@ -30,6 +30,10 @@ HELP_ENV="
 GH_TOKEN
    A GitHub Personal API Token that will be used to authenticate.
 
+GH_USER
+   If given, use basic authentication with the given user. Required if
+   GH_TOKEN is not set.
+
 REPO
    The repo owner and repo name, separated by \"/\".
 "

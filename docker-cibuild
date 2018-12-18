@@ -1,17 +1,19 @@
 #!/bin/sh
 PROG=docker-cibuild
 DESC="Run \"docker build\" with added labels, produce metadata"
-USAGE1="${PROG} [--metadata=<metadata_file>] [--image-name=<tagless_name>]
+USAGE1="${PROG} [--metadata=<metadata_file>] [--image-name=<image_name>]
                     [--source-version=<src_vers>]
                     [--image-qualifier=<img_qual>] <BUILD_OPTS>"
 METADATA_VERSION=1.0.0
+
+RELEASE_TAG="${RELEASE_TAG:-${CIRCLE_TAG}}"
+SOURCE_VERSION_DEFAULT=`parse-semver -n "${RELEASE_TAG}" 2>/dev/null`
 
 HELP_DESC="
 This script runs \"docker build\", adds some useful labels, and applies a
 unique tag to the resulting image. It also captures the build output,
 extracts data from it, supplements it with information from \"docker
-inspect\" and various git commands, and writes this metadata to standard
-output.
+inspect\" and various git commands, and writes this metadata to a file.
 
 Note that this will not work if the -q|--quiet option to \"docker
 build\" is given.
@@ -20,51 +22,60 @@ The following arguments are automatically passed to \"docker build\" in
 addition to any provided arguments:
     --label git.remote.origin=<github_repo_url>
     --label git.revision.sha1=<git_commit_hash>
+    --label image.registry=<image_registry>
+    --label image.repo=<image_repo>
     --label image.name=<tagless_name>    # see --image-name
     --label image.qualifier=<img_qual>   # see --image-qualifier
     --label source.version=<src_vers>    # see --source-version
 
-Metadata is presented as \"<parameter>=<value>\" definitions, one per line,
-in the given order:
+Metadata is in JSON format as <parameter>:<value> entries, in the
+given order:
 
   Parameter          Value
   ---------          -----
-  METADATA_VERSION   The version of the metadata format; current value is
+  metadata_version   The version of the metadata format; current value is
                      \"${METADATA_VERSION}\".
-  REMOTE_ORIGIN      The github repo URL
-  GIT_REPO           The username and repo name of the github repo, with
+  remote_origin      The github repo URL
+  git_repo           The username and repo name of the github repo, with
                       a separating \"/\".
-  REVISION_SHA1      The full sha1 hash of the current git revision
-  SOURCE_VERSION     The source version (see --source-version=<src_vers>)
-  IMAGE_CREATED      The ISO8601 UTC creation time of the image
+  revision_sha1      The full sha1 hash of the current git revision
+  source_version     The source version (see --source-version=<src_vers>)
+  image_created      The ISO8601 UTC creation time of the image
                      (nanosecond resolution)
-  IMAGE_DIGEST       The digest of the image (with leading \"sha256:\")
-  IMAGE_ID           The first 12 characters of the image digest
-  IMAGE_NAME         The full (registry) docker name, without a tag or
-                      digest (see --image-name=<tagless_name>)
-  IMAGE_QUALIFIER    The image qualifier (see --image-qualifier=<img_qual>)
-  IMAGE_TAG          The unique tag assigned to the image by this script;
+  image_digest       The digest of the image (with leading \"sha256:\")
+  image_id           The first 12 characters of the image digest
+  image_registry     The name of the target docker registry.
+  image_repo         The name of the target docker repository.
+  image_name         The name of the image.
+  image_qualifier    The image qualifier (see --image-qualifier=<img_qual>)
+  image_tag          The unique tag assigned to the image by this script;
                      it has the form
-                         <src_vers>-<ctime>[.<img_qual>]    
+                         <source_version>-<ctime>[-<image_qualifier>]    
                      where <ctime> is a compact form of the image creation
                      time.
-  BASE_TAG           The full (pullable) \"tag name\" of the base image
-  BASE_DIGEST        The full (pullable) \"digest name\" of the base image
-  BASE_REMOTE_ORIGIN The github repo url for the base image, if the base
+  base_tag           The full (pullable) \"tag name\" of the base image
+  base_digest        The full (pullable) \"digest name\" of the base image
+  base_remote_origin The github repo url for the base image, if the base
                      image was built by this script.
-  BASE_GIT_REPO      The username and repo name of the github repo for the
+  base_git_repo      The username and repo name of the github repo for the
                      base image, with a separating \"/\"; only available
                      if the base image was built by this script.
+
+The \"image_registry\", \"image_repo\", and \"image_name\" are assigned
+defaults using the docker-image-name script.
+
+The basename of the metadata file is the image name.
+
+The image is tagged as <image_name>:<image_tag>.
 "
 HELP_OPTS="
 --metadata=<metadata_file>
-    If given, the name of a local file into which the image metadata should be
-    written, instead of standard ouptut.
+    If given, the name of a local file into which the image metadata
+    should be written. If not given, \"./<image_name>:<image_tag>\" is used.
 
---image-name=<tagless_name>
-    The full name of the image (including its registry, if not dockerhub),
-    without a trailing \":<tag>\" or \"@<digest>\" component. This is
-    required if the IMAGE_NAME environment variable is not set.
+--image-name=<image_name>
+    The name of the docker image (without registry or repository components).
+    This is required if the IMAGE_NAME environment variable is not set.
 
 --source-version=<src_vers>
     The version number of the source revision. By convention, this is a
@@ -84,14 +95,13 @@ HELP_OPTS="
     -q|--quiet will cause an error.
 "
 HELP_ENV="
-IMAGE_NAME
-    The default for the --image-name argument.
-
-SOURCE_VERSION
-    The default for the --source-version argument.
-
 IMAGE_QUALIFIER
     The default for the --image-qualifier argument.
+
+SOURCE_VERSION
+    The default for the --source-version argument. If not set, the script
+    attempts to extract a version string from the RELEASE_TAG and
+    CIRCLE_TAG environment variables.
 "
 
 SCRIPTDIR=`cd \`dirname $0\`; pwd`
@@ -100,13 +110,14 @@ SCRIPTDIR=`cd \`dirname $0\`; pwd`
 set : "$@" ====
 shift
 abort_on_error=:
-METADATA_FILE=
+eval `docker-image-name --export`
+SOURCE_VERSION="${SOURCE_VERSION:-${SOURCE_VERSION_DEFAULT}}"
 while [ ":$1" != ":====" ] ; do
     arg="$1"
     shift
     case ${arg} in
         --metadata=*)
-            METADATA_FILE=`expr "${arg}" : '--metadata=\(.*\)$'` ;;
+            IMAGE_METADATA=`expr "${arg}" : '--metadata=\(.*\)$'` ;;
         --image-name=*)
             IMAGE_NAME=`expr "${arg}" : '--image-name=\(.*\)$'` ;;
         --source-version=*)
@@ -145,6 +156,8 @@ if [ ":$toplevel" != ":" ] ; then
     gitRevisionSha1=`git rev-list HEAD | head -1`
     set : --label "git.remote.origin=${gitRemoteOrigin}" \
           --label "git.revision.sha1=${gitRevisionSha1}" \
+          --label "image.registry=${IMAGE_REGISTRY}" \
+          --label "image.repo=${IMAGE_REPO}" \
           --label "image.name=${IMAGE_NAME}" \
           --label "image.qualifier=${IMAGE_QUALIFIER}" \
           --label "source.version=${SOURCE_VERSION}" \
@@ -213,25 +226,32 @@ imageTag="${SOURCE_VERSION}-${imageCtime}${IMAGE_QUALIFIER}"
 imageTaggedName="${IMAGE_NAME}:${imageTag}"
 docker tag "${imageId}" "${imageTaggedName}" || exit 1
 
-if [ ":${METADATA_FILE}" != ":" ] ; then
-    exec >"${METADATA_FILE}"
+if [ ":${IMAGE_METADATA}" = ":" ] ; then
+    IMAGE_METADATA="./${imageTaggedName}"
+else
+    mkdir -p `dirname ${IMAGE_METADATA}` || exit 1
 fi
-cat <<EOF
-METADATA_VERSION=$METADATA_VERSION
-REMOTE_ORIGIN=$gitRemoteOrigin
-GIT_REPO=$gitRepo
-REVISION_SHA1=$gitRevisionSha1
-SOURCE_VERSION=$SOURCE_VERSION
-IMAGE_CREATED=$imageCreated
-IMAGE_DIGEST=$imageDigest
-IMAGE_ID=$imageId
-IMAGE_NAME=$IMAGE_NAME
-IMAGE_QUALIFIER=$IMAGE_QUALIFIER
-IMAGE_TAG=$imageTag
-BASE_TAG=$baseTag
-BASE_DIGEST=$baseDigest
-BASE_REMOTE_ORIGIN=$baseRemoteOrigin
-BASE_GIT_REPO=$baseGitRepo
+
+cat <<EOF >"${IMAGE_METADATA}"
+{
+  "metadata_version": "${METADATA_VERSION}",
+  "remote_origin": "${gitRemoteOrigin}",
+  "git_repo": "${gitRepo}",
+  "revision_sha1": "${gitRevisionSha1}",
+  "source_version": "${SOURCE_VERSION}",
+  "image_created": "${imageCreated}",
+  "image_digest": "${imageDigest}",
+  "image_id": "${imageId}",
+  "image_registry": "${IMAGE_REGISTRY}",
+  "image_repo": "${IMAGE_REPO}",
+  "image_name": "${IMAGE_NAME}",
+  "image_qualifier": "${IMAGE_QUALIFIER}",
+  "image_tag": "${imageTag}",
+  "base_tag": "${baseTag}",
+  "base_digest": "${baseDigest}",
+  "base_remote_origin": "${baseRemoteOrigin}",
+  "base_git_repo": "${baseGitRepo}"
+}
 EOF
 
 exit 0

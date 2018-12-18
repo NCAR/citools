@@ -24,8 +24,8 @@ SCRIPTDIR=`cd \`dirname $0\`; pwd`
 if [ ":$1" = ":--force" ] ; then
     shift
 else
-    check_jq=`type jq 2>/dev/null`
-    if [ ":${check_jq}" != ":" ] ; then
+    check_jq=`type jq 2>&1`
+    if [ $? = 0 ] ; then
         vecho "${check_jq}"
         exit 0
     fi

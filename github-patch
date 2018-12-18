@@ -22,7 +22,11 @@ GITHUB_URL
    If not given, \"https://api.github.com\" is used.
 
 GH_TOKEN
-   A GitHub Personal API Token that will be used to authenticate.
+   If given, a GitHub Personal API Token that will be used to authenticate.
+
+GH_USER
+   If given, use basic authentication with the given user. Required if
+   GH_TOKEN is not set.
 "
 SCRIPTDIR=`cd \`dirname $0\`; pwd`
 . ${SCRIPTDIR}/citools-basics.rc || exit 1
@@ -35,16 +39,27 @@ case $1 in
     *)
         URL_PATH="/$@" ;;
 esac
+if [ ":${GH_TOKEN}${GH_USER}" = ":" ] ; then
+    echo "${PROG}: one of GH_TOKEN or GH_USER must be set" >&2
+    exit 1
+fi
+
 URL="${GITHUB_URL}${URL_PATH}"
 
 payload=`cat`
 
-response=`curl -is -L -X PATCH \
+set curl -is -L -X PATCH \
      -H "Content-Type: application/json" \
-     -H "Accept: application/vnd.github.v3+json" \
-     -H "Authorization: token ${GH_TOKEN}" \
+     -H "Accept: application/vnd.github.v3+json"
+if [ ":${GH_TOKEN}" != ":" ] ; then
+    set "$@" -H "Authorization: token ${GH_TOKEN}"
+else
+    set "$@" -u ${GH_USER}
+fi
+set "$@" \
      --data-binary "${payload}" \
-     "${URL}"` || exit 1
+     "${URL}"
+response=`"$@"` || exit 1
 
 statusline=`echo "${response}" | head -1`
 case $statusline in

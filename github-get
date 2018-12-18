@@ -19,6 +19,8 @@ The \"path\" argument is
 HELP_OPTS="
 --type=<content_type>
     An alternate content type to use (default is ${CONTENT_TYPE})
+    Use basic authentication with the given user. Required if the GH_TOKEN
+    environment variable is not set.
 "
 HELP_ARGS="
 path
@@ -30,7 +32,11 @@ GITHUB_URL
    If not given, "https://api.github.com" is used.
 
 GH_TOKEN
-   A GitHub Personal API Token that will be used to authenticate.
+   If given, a GitHub Personal API Token that will be used to authenticate.
+
+GH_USER
+   If given, use basic authentication with the given user. Required if
+   GH_TOKEN is not set.
 "
 SCRIPTDIR=`cd \`dirname $0\`; pwd`
 . ${SCRIPTDIR}/citools-basics.rc || exit 1
@@ -50,17 +56,26 @@ while [ $# != 0 ] ; do
     esac
     shift
 done
+if [ ":${GH_TOKEN}${GH_USER}" = ":" ] ; then
+    echo "${PROG}: one of GH_TOKEN or GH_USER must be set" >&2
+    exit 1
+fi
+
 URL="${GITHUB_URL}${URL_PATH}"
+
 #
 # Note: We are handling redirects ourselves rather than using the curl -L flag
 # because some redirects (specifically to AWS S3) cause curl to fail
 #
 vecho "Requesting GET from URL ${URL}..."
-response=`curl -is \
-     -H "Accept: ${CONTENT_TYPE}" \
-     -H "Authorization: token ${GH_TOKEN}" \
-     -H "Cache-Control: no-cache" \
-     "${URL}"`
+set curl -is -H "Accept: ${CONTENT_TYPE}" 
+if [ ":${GH_TOKEN}" != ":" ] ; then
+    set "$@" -H "Authorization: token ${GH_TOKEN}"
+else
+    set "$@" -u ${GH_USER}
+fi
+set "$@" -H "Cache-Control: no-cache" "${URL}"
+response=`"$@"`
 rc=$?
 if [ $rc != 0 ] ; then
     echo "${PROG}: curl error $rc" >&2

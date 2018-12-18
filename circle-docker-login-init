@@ -1,15 +1,16 @@
 #!/bin/sh
 PROG=circle-docker-login-init
 DESC="Retrieve and cache a \"docker login\" command"
-USAGE1="${PROG} remote_image_name"
+USAGE1="${PROG} remote_image_name..."
 
 HELP_DESC="
-Log in to a docker registry and cache the login command.
+Log in to docker registry and cache the login command.
 "
 HELP_ARGS="
-remote_image_name
+remote_image_name...
     The name of the remote image, with or without a tag or
-    digest specification.
+    digest specification. Multiple images can be supplied; ultimately there
+    will be only one login per register type (\"ecr\" or \"dockerhub\").
 "
 SCRIPTDIR=`cd \`dirname $0\`; pwd`
 . ${SCRIPTDIR}/citools-basics.rc || exit 1
@@ -23,16 +24,23 @@ if [ ":$INIT_RC" = ":" ] ; then
     exit 1
 fi
 
-registry=`docker-get-login --show-type "$1"` || exit 1
-if [ ":$registry" = "ecr" ] ; then
-    variable=ECR_DOCKER_LOGIN
-elif [ ":$registry" = "dockerhub" ] ; then
-    variable=DOCKERHUB_DOCKER_LOGIN
-fi
-login=`docker-get-login "$1" 2>/dev/null`
-if [ ":$login" != ":" ] ; then
-    eval ${variable}="\"${login}\""
-    export $variable
-    circle-env --add-secret ${variable}
-fi
+ecr=
+dockerhub=
+for name in "$@" ; do
+    registry=`docker-get-login --show-type "${name}"` || exit 1
+    if [ ":$registry" = "ecr" ] ; then
+        ecr=ECR
+    elif [ ":$registry" = "dockerhub" ] ; then
+        dockerhub=DOCKERHUB
+    fi
+done
+for type in ${ecr} ${dockerhub} ; do
+    variable="${type}_DOCKER_LOGIN"
+    login=`docker-get-login "${type}" 2>/dev/null`
+    if [ ":$login" != ":" ] ; then
+        eval ${variable}="\"${login}\""
+        export $variable
+        circle-env --add-secret ${variable}
+    fi
+done
 exit 0

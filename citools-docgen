@@ -1,7 +1,7 @@
 #!/bin/sh
 PROG=citools-docgen
 DESC="Generate documentation from --help output"
-USAGE1="${PROG} docdir"
+USAGE1="${PROG} [--bindir=dir] docdir"
 
 REPO_DEFAULT="NCAR/citools"
 
@@ -12,6 +12,13 @@ option, and a markdown index file with links to the text documents.
 
 Other repos that use the same scripting conventions as citools can use
 this script as well.
+"
+HELP_OPTS="
+--bindir=dir
+    If given, the top-level directory containing the scripts to document.
+    If not given, the top-level directory in the repo is used. If a
+    relative path is provided, it is assumed to relative to the top-level
+    directiry in the repo.
 "
 HELP_ARGS="
 docdir
@@ -37,6 +44,18 @@ REPO=${REPO:=${REPO_DEFAULT}} export REPO
 REPONAME=`expr "${REPO}" : '[^/]*/\(.*\)$'`
 WIKI_URL="https://github.com/${REPO}/wiki"
 
+REPO_ROOT=`git rev-parse --show-toplevel` || exit 1
+BINDIR="${REPO_ROOT}"
+case $1 in
+    --bindir=/*)
+        BINDIR=`expr "$1" : '--scriptdir=\(.*\)'`
+        shift ;;
+    --bindir=*)
+        RELDIR=`expr "$1" : '--scriptdir=\(.*\)'`
+        BINDIR="${REPO_ROOT}/${RELDIR}"
+        shift ;;
+esac
+
 DOCDIR="$1"
 if [ ":$DOCDIR" = ":" ] ; then
     echo "${PROG}: directory argument required" >&2
@@ -46,14 +65,14 @@ if [ ! -d "${DOCDIR}" ] ; then
     echo "${PROG}: $DOCDIR: not a directory" >&2
     exit 1
 fi
+DOCDIR=`cd "${DOCDIR}"; pwd`
 
 TMPFILE="${DOCDIR}/.tmp"
 INDEXFILE="${DOCDIR}/Home.md"
 
 :>${INDEXFILE}.tmp
 
-REPO_ROOT=`git rev-parse --show-toplevel` || exit 1
-cd "${REPO_ROOT}" || exit 1
+cd "${BINDIR}" || exit 1
 
 trap "rm -rf ${TMPFILE} ${INDEXFILE}.tmp ; exit 1" 0 1 2 13 15
 
