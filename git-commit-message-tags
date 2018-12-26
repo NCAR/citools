@@ -1,0 +1,23 @@
+#!/bin/sh
+PROG=git-commit-message-tags
+DESC="Show git commit message \"tags\""
+USAGE1="${PROG}"
+
+HELP_DESC="
+This script reads commit hashes from standard input and shows all \"tags\"
+embedded in the messages of those commits. \"Tags\" are substrings
+enclosed in square brackets.
+"
+
+SCRIPTDIR=`cd \`dirname $0\`; pwd`
+. ${SCRIPTDIR}/citools-basics.rc || exit 1
+
+while read commitHash ; do
+    git log --pretty=format:"%s %b" -n 1 "${commitHash}"
+done | tr ']' '\n' | sed -e 's/[^[]*[[]/[/' | grep '^[[]' | sed -e 's/^[[]//'
+
+
+
+
+
+

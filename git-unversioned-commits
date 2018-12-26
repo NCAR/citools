@@ -1,0 +1,36 @@
+#!/bin/sh
+PROG=git-unversioned-commits
+DESC="List commit hashes for recent commits"
+USAGE1="${PROG}"
+
+HELP_DESC="
+This script shows the abbreviated commit hash for every commit after the
+last semantic version tag.
+"
+
+SCRIPTDIR=`cd \`dirname $0\`; pwd`
+. ${SCRIPTDIR}/citools-basics.rc || exit 1
+set -vx
+last_rev=`git rev-list HEAD | head -1`
+
+tags=`git tag --list --merged HEAD` || exit 1
+latest_semver=`echo "${tags}" | versions -c`
+if [ ":${latest_semver}" = ":" ] ; then
+    first_rev=`git rev-list HEAD | tail -1`
+else
+    latest_versioned_rev=`git rev-list -n 1 ${latest_semver}`
+    if [ ":${latest_versioned_rev}" = ":${last_rev}" ] ; then
+        exit 0
+    fi
+    first_rev=`git rev-list HEAD | sed -e "/${versioned_rev}/q" | tail -2 | head -1`
+fi
+
+if [ "${first_rev}" = "${last_rev}" ] ; then
+   revspec=" -n 1 ${last_rev}"
+else
+   revspec="${first_rev}..${last_rev}"
+fi
+git log --pretty=format:"%h" ${revspec}
+
+
+
