@@ -42,9 +42,10 @@ fi
 if [ ":${tag}" = ":" ] ; then
     filter=cat
 else
-    filter="sed -n -e 's/.*\\[${tag} *\([^\\]]*\).*/\\1/p'"
+    filter='sed -n -e '\''s/\([^ ]* \).*\['${tag}'  *\([^]]*\)].*/\1\2/p'\'
 fi
-git log --pretty=format:"%h %s" ${revspec} | ${filter}
+git log --pretty=format:"%h %s" ${revspec} | eval "${filter}"
+ 
 
 
 
