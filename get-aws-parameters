@@ -1,0 +1,49 @@
+#!/bin/sh
+PROG=get-aws-parameters
+DESC="Pull parameter definitions from AWS's Parameter Store"
+USAGE1="${PROG} [--prefix=parameter_prefix] variable_names..."
+
+HELP_DESC="
+Retrieve parameters from the AWS System Manager Parameter Store and write the
+values as shell variable definitions.
+"
+HELP_OPTS="
+--prefix=<parameter_prefix>
+    Assume that the parameters in the Parameter Store have names of the
+    form <parameter_prefix><variable_name>. The <parameter_prefix> portion
+    will not appear in the output.
+"
+HELP_ARGS="
+variable_names...
+    The names of the variables to be output; these are also the names of the
+    parameters in the Parameter Store, with the parameter_prefix prepended.
+
+"
+HELP_ENV="
+AWS_DEFAULT_PROFILE
+AWS_DEFAULT_REGION
+AWS_ACCESS_KEY_ID
+AWS_SECRET_ACCESS_KEY
+    These variables are all supported by the aws cli. Refer to AWS
+    documentation for details.
+"
+SCRIPTDIR=`cd \`dirname $0\`; pwd`
+. ${SCRIPTDIR}/citools-basics.rc || exit 1
+
+PREFIX=
+case $1 in
+    --prefix=*)
+        PREFIX=`expr ":$1" : ':--prefix=\(.*\)'`
+        shift ;;
+esac
+
+for var in "$@" ; do
+    parm="${PREFIX}${var}"
+    escaped_val=`aws ssm get-parameter --with-decryption --name="${parm}" |
+      tr -d '\r' |
+      sed -n -e 's/ *"Value": "\(.*\)", *$/\1/p'`
+    echo "${var}=\"${escaped_val}\""
+done
+
+
+

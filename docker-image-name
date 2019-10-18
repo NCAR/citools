@@ -2,7 +2,6 @@
 PROG=docker-image-name
 DESC="Provide definitions for docker image name components"
 USAGE1="${PROG} [--export]"
-USAGE2="${PROG} --path"
 
 IMAGE_REGISTRY_DEFAULT="registry-1.docker.io"
 IMAGE_REPO_DEFAULT="ncar"
@@ -14,24 +13,26 @@ variables:
     IMAGE_REGISTRY
         The docker image registry name.
 
-    IMAGE_REGISTRY_PATH
-        If the registry is the default registry, an empty string; otherwise,
-        the registry with a trailing "/". This is meant to be combined with
-        The image registryThe combined registry, repo, and name, as it would be used in
-        a docker command. 
-        is left out of this string.
-
     IMAGE_REPO
         The docker image repository name.
 
     IMAGE_NAME
         The base image name.
 
-If any of these variables is already defined as environmnet variables,
-those values are used. Otherwise, defaults are used. The default for
+    IMAGE_PATH
+        The full \"path\" of the image (except for the tag/digest qualifier).
+        This is normally
+          \${IMAGE_REGISTRY}/\${IMAGE_REPO}/\${IMAGE_NAME}
+
+        However, if the image registry is the default registry, it is
+          \${IMAGE_REPO}/\${IMAGE_NAME}
+
+If any of these variables except IMAGE_PATH is already defined as environment
+variables, those values are used. Otherwise, defaults are used. The default for
 IMAGE_REGISTRY is \"${IMAGE_REGISTRY_DEFAULT}\". The default for IMAGE_REPO
 is \"${IMAGE_REPO_DEFAULT}\". The default for IMAGE_NAME is \${CIRCLE_PROJECT_REPONAME}
 if it is set, or the basename of the git remore origin URL otherwise.
+IMAGE_PATH is always derived from the other variables.
 
 The output is in the form of Bourne-compatible variable assignments, and can
 be \"eval'ed\".
@@ -39,17 +40,6 @@ be \"eval'ed\".
 HELP_OPTS="
 --export
     If included, an \"export\" command is also printed.
-
---path
-    If given, instead of printing out variable definitions, a complete
-    image \"path\" is printed out. The form is usually
-
-      ${IMAGE_REGISTRY}/${IMAGE_REPO}/${IMAGE_NAME}
-
-    However, if the image registry is the default registry, the form is
-
-      ${IMAGE_REPO}/${IMAGE_NAME}
-
 "
 SCRIPTDIR=`cd \`dirname $0\`; pwd`
 . ${SCRIPTDIR}/citools-basics.rc || exit 1
@@ -58,9 +48,7 @@ SHOW_PATH=no
 EXPORT=
 if [ ":$1" = ":--export" ] ; then
     EXPORT="
-export IMAGE_REGISTRY IMAGE_REPO IMAGE_NAME"
-elif [ ":$1" = ":--path" ] ; then
-    SHOW_PATH=yes
+export IMAGE_REGISTRY IMAGE_REPO IMAGE_NAME IMAGE_PATH"
 fi
 reg="${IMAGE_REGISTRY:-${IMAGE_REGISTRY_DEFAULT}}"
 IMAGE_REGISTRY=`echo "${reg}" | sed -e 's:/*$::'`
@@ -74,17 +62,15 @@ if [ ":${IMAGE_NAME}" = ":" ] ; then
     fi
     IMAGE_NAME=`basename ${gitRemoteOrigin} .git`
 fi
-if [ $SHOW_PATH = yes ] ; then
-    if [ ":${IMAGE_REGISTRY}" = ":${IMAGE_REGISTRY_DEFAULT}" ] ; then
-        echo "${IMAGE_REPO}/${IMAGE_NAME}"
-    else
-        echo "${IMAGE_REGISTRY}/${IMAGE_REPO}/${IMAGE_NAME}"
-    fi
-    exit 0
+if [ ":${IMAGE_REGISTRY}" = ":${IMAGE_REGISTRY_DEFAULT}" ] ; then
+    IMAGE_PATH="${IMAGE_REPO}/${IMAGE_NAME}"
+else
+    IMAGE_PATH="${IMAGE_REGISTRY}/${IMAGE_REPO}/${IMAGE_NAME}"
 fi
 cat <<EOF
 IMAGE_REGISTRY="${IMAGE_REGISTRY}"
 IMAGE_REPO="${IMAGE_REPO}"
-IMAGE_NAME="${IMAGE_NAME}"${EXPORT}
+IMAGE_NAME="${IMAGE_NAME}"
+IMAGE_PATH="${IMAGE_PATH}"${EXPORT}
 EOF
 

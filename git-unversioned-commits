@@ -10,7 +10,7 @@ last semantic version tag.
 
 SCRIPTDIR=`cd \`dirname $0\`; pwd`
 . ${SCRIPTDIR}/citools-basics.rc || exit 1
-set -vx
+
 last_rev=`git rev-list HEAD | head -1`
 
 tags=`git tag --list --merged HEAD` || exit 1
@@ -22,7 +22,7 @@ else
     if [ ":${latest_versioned_rev}" = ":${last_rev}" ] ; then
         exit 0
     fi
-    first_rev=`git rev-list HEAD | sed -e "/${versioned_rev}/q" | tail -2 | head -1`
+    first_rev=`git rev-list HEAD | sed -e "/${latest_versioned_rev}/q" | tail -2 | head -1`
 fi
 
 if [ "${first_rev}" = "${last_rev}" ] ; then

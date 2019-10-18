@@ -1,0 +1,54 @@
+#!/bin/sh
+PROG=docker-citag
+DESC="Tag and optionally push an image built using docker-cibuild"
+USAGE1="${PROG} <image> <tags...>"
+USAGE2="${PROG} --push <image> [<tags>...]"
+HELP_DESC="
+Tag and optionally push an image built using the docker-cibuild script;
+these images contains labels that identify the registry, repo, name, and
+a unique tag.
+"
+HELP_OPTS="
+--push
+    If given, push all tags to the docker registery.
+"
+HELP_ARGS="
+<image>
+    The id/name of an image.
+
+<tags>...
+    A list of tags to apply. This is optional if the --push option is
+    included, in which case only the unique tag already assigned to the
+    image is pushed.
+"
+SCRIPTDIR=`cd \`dirname $0\`; pwd`
+. ${SCRIPTDIR}/citools-basics.rc || exit 1
+
+PUSH=
+if [ ":$1" = ":--push" ] ; then
+    PUSH=--push
+    shift
+fi
+
+IMAGE="$1"
+shift
+if [ ":${IMAGE}" = ":" ] ; then
+    echo "${PROG}: image id/name is required" >&2
+    exit 1
+fi
+if [ "$#${PUSH}" = "0" ] ; then
+    echo "${PROG}: at least one tag is required" >&2
+    exit 1
+fi
+
+IMAGE_METADATA=`docker-cimeta ${IMAGE}` || exit 1
+if [ ":${IMAGE_METADATA}" = ":" ] ; then
+    echo "${PROG}: ${IMAGE}: not a valid docker-build image" >&2
+    exit 1
+fi
+image_path=`echo "${IMAGE_METADATA}" | jq -r .image_path`
+image_tag=`echo "${IMAGE_METADATA}" | jq -r .image_tag`
+set "${image_tag}" "$@" 
+
+vecho docker-tag-push ${PUSH} ${IMAGE} ${image_path} "$@"
+docker-tag-push ${PUSH} ${IMAGE} ${image_path} "$@" || exit 1

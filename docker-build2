@@ -9,39 +9,43 @@ Additional information about the git release is also collected. In the
 second pass, the collected metadata is added to the new image using labels.
 Image caching is always enabled in the second pass to speed up the build
 and to force the second image to match the first. A unique tag is generated
-and assigned to the final image.
+and assigned to the final image, and the collected metadata, the unique tag,
+and the final image digest are written to a separate file called
+\"image-meta.json\".
 
 The following metadata attributes are added to the image using labels:
-  base_digest             Digest of the base image
-  base_git_remote_origin  Github repo url for the base image, if the
-                           base image was built by this script
-  base_git_repo           Git username/reponame of the github repo for the
-                           base image, if the base image was built by this
-                           script.
-  base_tag                Full \"tagged\" name of the base image
-  git_branch              Git branch
   git_remote_origin       Git remote origin url
   git_repo                Git username/reponame from the remote origin url
   git_revision_sha1       Git revision sha1 of most recent commit
+  source_version          <major>.<minor>.<patch> for the source release
+  image_registry          Docker image registry
+  image_repo              Docker image repository
   image_name              Image name
   image_path              The registry/repo/name for the image; if the
                           registry is the default docker registry, it is
                           omitted. If a \":<tag>\" or \"@<digest>\" is
                           appended, the name should usable in a docker
                           \"pull\" command.
-  image_qualifier         Image qualifier string.
-  image_registry          Docker image registry
-  image_repo              Docker image repository
-  prerelease              The \"prerelease\" tag, if set.
-  source_version          <major>.<minor>.<patch> for the source release
+  image_qualifier         Image qualifier string
+  base_tag                Full \"tagged\" name of the base image
+  base_digest             Digest of the base image
+  base_git_remote_origin  Github repo url for the base image, if the
+                           base image was built by this script
+  base_git_repo           Git username/reponame of the github repo for the
+                           base image, if the base image was built by this
+                           script.
+The same attributes are written to the metadata file, along with the
+following additional attributes:
+  metadata_version        Metadata format version
+  image_digest            Digest of the final image
+  image_tag               Unique docker tag assigned to the final image
                            
 The \"source_version\" and \"image_qualifier\" are derived from the most
 recent semver git tag. If the current revision is tagged with a semantic
 version, that tag is used, otherwise the most recent tag is used after
-incrementing the patch number (see the \"get-git-version\" script). The
-source_version is the major.minor.patch semver component, and the
-image_qualifier is the metadata semver component without its leading
-\"+\".
+incrementing the patch number. The source_version is the major.minor.patch
+semver component, and the image_qualifier is the metadata semver component
+without its leading \"+\". See the \"get-git-version\" script.
 
 The \"image_registry\", \"image_repo\", \"image_name\" and \"image_path\"
 values are obtained using the \"docker-image-name\" script.
@@ -59,11 +63,24 @@ HELP_OPTS="
 <build_opts>
     All options are passed verbatim to \"docker build\".
 "
+HELP_ENV="
+IMAGE_METADATA_DIR
+    If given, the name of a directory to which the image metadata file
+    should be written. Default is \".\".
+"
 SCRIPTDIR=`cd \`dirname $0\`; pwd`
 . ${SCRIPTDIR}/citools-basics.rc || exit 1
 
 . setup-scratchdir.rc
 
+METADATA_VERSION=1.0.0
+
+IMAGE_METADATA_DIR="${IMAGE_METADATA_DIR:-.}"
+if [ ! -d "${IMAGE_METADATA_DIR}" ] ; then
+    echo "${PROG}: ${IMAGE_METADATA_DIR}: no such directory" >&2
+    exit 1
+fi
+IMAGE_METADATA="${IMAGE_METADATA_DIR}/image-meta.json"
 NO_CACHE=
 PULL=
 set : "$@" ====
@@ -161,14 +178,12 @@ baseRemoteOrigin=`jq -r '.[0].Config.Labels.remote_origin' ${BASE_INSPECTION} | 
 # The following sets IMAGE_REGISTRY, IMAGE_REPO, IMAGE_NAME, and IMAGE_PATH
 eval `docker-image-name --export`
 
-gitBranch=`git branch | sed -n 's/^* \(.*\)/\1/p'`
 gitRemoteOrigin=`git config --get remote.origin.url`
 gitRevisionSha1=`git rev-list HEAD | head -1`
 gitRepo=`expr "${gitRemoteOrigin}" : '.*[:/]\([^:/][^:/]*/[^:/][^:/]*\)\.git$'`
 baseGitRepo=`expr "${baseRemoteOrigin}" : '.*[:/]\([^:/][^:/]*/[^:/][^:/]*\)\.git$'`
 
 SOURCE_VERSION=`parse-semver -n "${RELEASE_TAG}"`
-PRERELEASE=`parse-semver -p "${RELEASE_TAG}" | sed -e 's/^-//'`
 IMAGE_QUALIFIER=`parse-semver -m "${RELEASE_TAG}" | sed -e 's/^+//'`
 IMAGE_TAG_QUALIFIER=`parse-semver -m "${RELEASE_TAG}" | sed -e 's/^+/./'`
 
@@ -180,7 +195,6 @@ set docker build \
   --label "base_git_remote_origin=${baseRemoteOrigin}" \
   --label "base_git_repo=${baseGitRepo}" \
   --label "base_tag=${baseTag}" \
-  --label "git_branch=${gitBranch}" \
   --label "git_remote_origin=${gitRemoteOrigin}" \
   --label "git_repo=${gitRepo}" \
   --label "git_revision_sha1=${gitRevisionSha1}" \
@@ -189,7 +203,6 @@ set docker build \
   --label "image_qualifier=${IMAGE_QUALIFIER}" \
   --label "image_registry=${IMAGE_REGISTRY}" \
   --label "image_repo=${IMAGE_REPO}" \
-  --label "prerelease=${PRERELEASE}" \
   --label "source_version=${SOURCE_VERSION}" \
   "$@"
 
@@ -204,13 +217,36 @@ if [ ":${finalImageId}" = ":" ] ; then
     echo "${PROG}: unexpected output" >&2
     exit 1
 fi
-imageTag=`docker-cimeta --attr=image_tag ${finalImageId}`
-imagePath=`docker-cimeta --attr=image_path ${finalImageId}`
+docker inspect ${finalImageId} >${IMAGE2_INSPECTION}
+imageDigest=`jq -r .[0].Id ${IMAGE2_INSPECTION}`
+imageCreated=`jq -r .[0].Created ${IMAGE2_INSPECTION}`
+imageCtime=`echo ${imageCreated} | sed -e 's/[-:]//g' -e 's/\.[0-9]*Z$/Z/'`
 
-imageTaggedName="${imagePath}:${imageTag}"
+gitRev=`expr "${gitRevisionSha1}" : '\(.......\).*'`
+imageTag="${SOURCE_VERSION}-${imageCtime}.${gitRev}${IMAGE_TAG_QUALIFIER}"
+imageTaggedName="${IMAGE_NAME}:${imageTag}"
 
-echo docker tag "${finalImageId}" "${imageTaggedName}"
 docker tag "${finalImageId}" "${imageTaggedName}" || exit 1
+cat >${IMAGE_METADATA} <<EOF
+{
+  "base_digest": "${baseDigest}",
+  "base_git_remote_origin": "${baseRemoteOrigin}",
+  "base_git_repo": "${baseGitRepo}",
+  "base_tag": "${baseTag}",
+  "git_remote_origin": "${gitRemoteOrigin}",
+  "git_repo": "${gitRepo}",
+  "git_revision_sha1": "${gitRevisionSha1}",
+  "image_digest": "${imageDigest}",
+  "image_name": "${IMAGE_NAME}",
+  "image_path": "${IMAGE_PATH}",
+  "image_qualifier": "${IMAGE_QUALIFIER}",
+  "image_registry": "${IMAGE_REGISTRY}",
+  "image_repo": "${IMAGE_REPO}",
+  "image_tag": "${imageTag}",
+  "metadata_version": "${METADATA_VERSION}",
+  "source_version": "${SOURCE_VERSION}",
+}
+EOF
 
 rm -rf "${SCRATCHDIR}"
 trap "" 0

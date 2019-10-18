@@ -1,23 +1,27 @@
 #!/bin/sh
 PROG="sw-manifest"
 DESC="Print a list of installed software on a linux host"
-USAGE1="${PROG}"
-USAGE2="${PROG} <docker_image>"
-HELP_DESC="
-Print a list of installed software on a linux host, including the output
-of \"uname -mvr\", the distro version, and all packages reported by the
-resident package manager.
-"
-HELP_ARGS="
-<docker-image>
-    If a non-option argument is given, it is assumed to be the name of
-    a local docker image; a temporary container is created and the
-    script is run inside the container.
-"
-SCRIPTDIR=`cd \`dirname $0\`; pwd`
-. ${SCRIPTDIR}/citools-basics.rc || exit 1
+USAGE1="${PROG} [from-base]"
+USAGE2="${PROG} -h|--help"
+BASE=
 
 case $1 in
+    -h|--help)
+        cat <<EOF
+NAME
+    $PROG - $DESC
+
+SYNOPSIS
+    $USAGE
+
+DESCRIPTION
+    Print a list of installed software on a linux host, including the output
+    of \"uname -mvr\", the distro version, and all packages reported by the
+    package manager.
+
+    The name of the base image should be passed in as a command-line argument.
+EOF
+        exit 0 ;;
     -*)
         echo "${PROG}: unknown option: $1" >&2
         exit 1 ;;
@@ -25,75 +29,69 @@ case $1 in
     '')
         : ;;
     *)
-        docker run --rm -u root --entrypoint=/bin/sh \
-            --volume="${SCRIPTDIR}/${PROG}:/tmp/${PROG}" \
-            "$1" "/tmp/${PROG}"
-        exit $? ;;
+        BASE="$1" ;;
 esac
+grep '.*:/docker/.*' /proc/1/cgroup >/dev/null 2>&1
+if [ $? != 0 ] ; then
+    echo "$PROG: Must be run in a docker container" >&2
+    exit 1
+fi
 
-# 
+cd /etc/ || exit 1
+
+kernelrel=`uname -r`
+kernelvers=`uname -v`
+machine=`uname -m`
+
 KNOWN_RELEASEFILES="
   alpine-release
   centos-release
   fedora-release
   oracle-release
-  redhat-release
   debian_version
-  SuSE-release
-  arch-release
-"
-KNOWN_PACKAGE_COMMANDS="
-  apk
-  rpm
-  apt
-  dpkg-query
-  pacman
-  nix-env
-  busybox
 "
 
 RELEASE_FILE=
-PACKAGE_MANAGER=
-
-kernel=`uname -mvr`
-echo "kernel: ${kernel}"
-
-cd /etc/
+RELEASE=
 for releasefile in ${KNOWN_RELEASEFILES} ; do
     if [ -f ${releasefile} ] ; then
-        read release <${releasefile}
-        echo "distro: ${releasefile}: ${release}"
+        read RELEASE <${releasefile}
+        RELEASE_FILE=${releasefile}
         break
     fi
 done
-cd /
-for cmd in ${KNOWN_PACKAGE_COMMANDS} ; do
-    found=`type ${cmd} 2>&1`
-    case $found in
-        *not\ found*)
-            : ;;
-        *)
-            echo "packages (${cmd}):"
-            case ${cmd} in
-              apk) 
-                  apk info -vv 2>&1 | sed -e 's/ - .*//' | sort | \
-                    grep -v 'WARNING: ' ;;
-              rpm)
-                  rpm -qa | sort ;;
-              apt)
-                  apt list --installed ;;
-              dpkg-query)
-                  dpkg-query -W ;;
-              pacman)
-                  pacman -Q ;;
-              nix-env)
-                  nix-env -q ;;
-              busybox)
-                  v=`busybox | head -1`
-                  c=`busybox --list | tr '\n' ','`
-                  echo "$v: $c" ;;
-            esac ;;
-    esac
-done
+if [ ":$RELEASE" = ":" ] ; then
+    echo "$PROG: Cannot determine linux distribution type!" >&2
+    exit 1
+fi
+
+if [ ":$BASE" != ":" ] ; then
+    echo "FROM: $BASE"
+fi
+
+echo "KERNEL_RELEASE $kernelrel"
+echo "KERNEL_VERSION $kernelvers"
+echo "MACHINE $machine"
+
+case $RELEASE_FILE in
+    alpine-release)
+        apk info -vv 2>&1 | sed -e 's/ - .*//' | sort | \
+            grep -v 'WARNING: ' | while read pkgvers ; do
+                pkg=`echo "$pkgvers" | sed 's/-[0-9].*//'`
+                vers=`echo "$pkgvers" | sed "s/^${pkg}-\([0-9].*\)/\1/"`
+                echo "$pkg $vers"
+            done ;;
+        
+    centos-release|fedora-release|oracle-release)
+        rpm -qa | sort | sed "s/^/$cmd: /" | while read rpm pkgvers ; do
+            pkg=`echo "$pkgvers" | sed 's/-[0-9].*//'`
+            vers=`echo "$pkgvers" | sed "s/^${pkg}-\([0-9].*\)/\1/"`
+            echo "$pkg $vers"
+        done ;;
+
+    debian_version)
+        dpkg-query -W | tr '\t' ' ' ;;
+
+esac
 
 exit 0

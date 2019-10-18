@@ -14,7 +14,10 @@ remote_image_name...
 "
 SCRIPTDIR=`cd \`dirname $0\`; pwd`
 . ${SCRIPTDIR}/citools-basics.rc || exit 1
-
+#
+# WORK HERE
+# Also get dockerhub token
+#
 if [ ":$1" = ":" ] ; then
     echo "${PROG}: remote image name argument required" >&2
     exit 1

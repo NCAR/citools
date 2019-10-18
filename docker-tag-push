@@ -1,7 +1,7 @@
 #!/bin/sh
 PROG=docker-tag-push
-DESC="Tag and push a docker image"
-USAGE1="${PROG} local_image remote_image [tags...]"
+DESC="Tag and optionally push a docker image"
+USAGE1="${PROG} [--push] local_image remote_image [tags...]"
 
 HELP_DESC="
 This script is a front-end for \"docker tag\" and \"docker push\".
@@ -27,6 +27,12 @@ remote_image
 "
 SCRIPTDIR=`cd \`dirname $0\`; pwd`
 . ${SCRIPTDIR}/citools-basics.rc || exit 1
+
+PUSH=n
+if [ ":$1" = ":--push" ] ; then
+    PUSH=y
+    shift
+fi
 
 LOCAL_IMAGE="$1"
 if [ ":${LOCAL_IMAGE}" = ":" ] ; then
@@ -70,8 +76,10 @@ for tag in ${TAGS} ; do
     vecho "Running \"docker tag ${LOCAL_IMAGE} ${REMOTE_IMAGE}:${tag}\""
     docker tag "${LOCAL_IMAGE}" "${REMOTE_IMAGE}:${tag}" || exit 1
 
-    vecho "Running \"docker push ${REMOTE_IMAGE}:${tag}\""
-    docker push "${REMOTE_IMAGE}:${tag}" || exit 1
+    if [ $PUSH = y ] ; then
+        vecho "Running \"docker push ${REMOTE_IMAGE}:${tag}\""
+        docker push "${REMOTE_IMAGE}:${tag}" || exit 1
+    fi
 done
 
 

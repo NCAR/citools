@@ -1,0 +1,178 @@
+#!/bin/sh
+PROG=docker-cimeta
+DESC="Extract metadata from a docker-cibuild image"
+USAGE1="${PROG} [--attr=<name>] <image>"
+
+HELP_DESC="
+Inspect a docker image built using docker-cibuild and extract relevant
+metadata. Write the data to standard output as a JSON object.
+
+The following metadata attributes are included:
+  base_digest             Digest of the base image
+  base_git_remote_origin  Github repo url for the base image, if the
+                           base image was built by this script
+  base_git_repo           Git username/reponame of the github repo for the
+                           base image, if the base image was built by this
+                           script.
+  base_tag                Full \"tagged\" name of the base image
+  docker_version          The docker version used when building the image
+  git_branch              Git branch
+  git_remote_origin       Git remote origin url
+  git_repo                Git username/reponame from the remote origin url
+  git_revision_sha1       Git revision sha1 of most recent commit
+  image_created
+  image_digest            The image digest
+  image_name              Image name
+  image_path              The registry/repo/name for the image; if the
+                          registry is the default docker registry, it is
+                          omitted. If a \":<tag>\" or \"@<digest>\" is
+                          appended, the name should usable in a docker
+                          \"pull\" command.
+  image_qualifier         Image qualifier string
+  image_registry          Docker image registry
+  image_repo              Docker image repository
+  image_tag               Unique docker tag assigned to the final image
+  prerelease              The \"prerelease\" tag, if set
+  source_version          <major>.<minor>.<patch> for the source release
+"
+HELP_OPTS="
+--attr=<name>
+    Instead of writing all attributes as a JSON object, show the unquoted
+    value of the named attribute. This can be given multiple times.
+"
+
+SCRIPTDIR=`cd \`dirname $0\`; pwd`
+. ${SCRIPTDIR}/citools-basics.rc || exit 1
+
+ATTRS=
+JSON=y
+while [ $# != 0 ] ; do
+    case $1 in
+        --attr=*)
+            attr=`expr "$1" : '--attr=\(.*\)'`
+            ATTRS="${ATTRS} ${attr}"
+            JSON=n
+            shift ;;
+        -*)
+            echo "${PROG}: unknown option: $1" >&2
+            exit 1 ;;
+        *)
+            break
+    esac
+done
+if [ ":$1" = ":" ] ; then
+    echo "${PROG}: image name/id is required" >&2
+    exit 1
+fi
+if [ ":${ATTRS}" = ":" ] ; then
+    ATTRS="
+base_digest
+base_git_remote_origin
+base_git_repo
+base_tag
+docker_version
+git_branch
+git_remote_origin
+git_repo
+git_revision_sha1
+image_created
+image_digest
+image_name
+image_path
+image_qualifier
+image_registry
+image_repo
+image_tag
+prerelease
+source_version
+"
+fi
+
+METADATA_VERSION=1.0.0
+
+data=`docker inspect $1 | jq ".[0]"` || exit 1
+
+for attr in ${ATTRS} ; do
+    case ${attr} in
+        base_digest)
+            v=`echo "${data}" | jq -r ".Config.Labels.base_digest"`
+            base_digest="${v}" ;;
+        base_git_remote_origin)
+            v=`echo "${data}" | jq -r ".Config.Labels.base_git_remote_origin"`
+            base_git_remote_origin="${v}" ;;
+        base_git_repo)
+            v=`echo "${data}" | jq -r ".Config.Labels.base_git_repo"`
+            base_git_repo="${v}" ;;
+        base_tag)
+            v=`echo "${data}" | jq -r ".Config.Labels.base_tag"`
+            base_tag="${v}" ;;
+        docker_version)
+            v=`echo "${data}" | jq -r ".DockerVersion"`
+            docker_version="${v}" ;;
+        git_branch)
+            v=`echo "${data}" | jq -r ".Config.Labels.git_branch"`
+            git_branch="${v}" ;;
+        git_remote_origin)
+            v=`echo "${data}" | jq -r ".Config.Labels.git_remote_origin"`
+            git_remote_origin="${v}" ;;
+        git_repo)
+            v=`echo "${data}" | jq -r ".Config.Labels.git_repo"`
+            git_repo="${v}" ;;
+        git_revision_sha1)
+            v=`echo "${data}" | jq -r ".Config.Labels.git_revision_sha1"`
+            git_revision_sha1="${v}" ;;
+        image_created)
+            v=`echo "${data}" | jq -r ".Created"`
+            image_created="${v}" ;;
+        image_digest)
+            v=`echo "${data}" | jq -r ".Id"`
+            image_digest="${v}" ;;
+        image_name)
+            v=`echo "${data}" | jq -r ".Config.Labels.image_name"`
+            image_name="${v}" ;;
+        image_path)
+            v=`echo "${data}" | jq -r ".Config.Labels.image_path"`
+            image_path="${v}" ;;
+        image_qualifier)
+            v=`echo "${data}" | jq -r ".Config.Labels.image_qualifier"`
+            image_qualifier="${v}" ;;
+        image_registry)
+            v=`echo "${data}" | jq -r ".Config.Labels.image_registry"`
+            image_registry="${v}" ;;
+        image_repo)
+            v=`echo "${data}" | jq -r ".Config.Labels.image_repo"`
+            image_repo="${v}" ;;
+        image_tag)
+            imageCreated=`echo "${data}" | jq -r ".Created"`
+            imageCtime=`echo ${imageCreated} | sed -e 's/[-:]//g' -e 's/\.[0-9]*Z$/Z/'`
+            r=`echo "${data}" | jq -r ".Config.Labels.git_revision_sha1"`
+            gitRev=`expr "${r}" : '\(.......\).*'`
+            srcvers=`echo "${data}" | jq -r ".Config.Labels.source_version"`
+            q=`echo "${data}" | jq -r ".Config.Labels.image_qualifier" | sed 's/\(..*\)/.\1/'`
+            image_tag="${srcvers}-${imageCtime}.${gitRev}${q}" ;;
+        prerelease)
+            v=`echo "${data}" | jq -r ".Config.Labels.prerelease"`
+            prerelease="${v}" ;;
+        source_version)
+            v=`echo "${data}" | jq -r ".Config.Labels.source_version"`
+            source_version="${v}" ;;
+        *)
+            echo "${PROG}: unsupported attribute: \"${attr}\"" >&2
+            exit 1 ;;
+    esac
+done
+
+if [ "${JSON}" = y ] ; then
+    echo "{"
+    for attr in ${ATTRS} ; do
+        eval "val=\"\${${attr}}\""
+        echo "  \"${attr}\": \"${val}\","
+    done
+    echo "  \"metadata_version\": \"${METADATA_VERSION}\""
+    echo "}"
+else
+    for attr in ${ATTRS} ; do
+        eval "val=\"\${${attr}}\""
+        echo "${val}"
+    done
+fi
