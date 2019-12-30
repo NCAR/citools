@@ -1,0 +1,16 @@
+#!/bin/sh
+PROG=FAILURE
+if [ ":$TMPDIR" = ":" ] ; then
+   echo "ERROR: TMPDIR environment variable must be set" >&2
+   exit 1
+fi
+. testutils.rc
+
+cat $TESTNAME
+echo FAIL
+cat $REPORT
+
+read count <$NFAILED
+count=`expr $count + 1`
+echo ${count} >$NFAILED
+

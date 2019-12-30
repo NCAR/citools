@@ -1,0 +1,17 @@
+:
+# Sourced to clean up test environment
+
+if [ ":$TMPDIR" = ":" ] ; then
+   echo "ERROR: TMPDIR environment variable must be set" >&2
+   exit 1
+fi
+
+read npassed <$NPASSED
+read nfailed <$NFAILED
+
+rm -rf ${TMPDIR}
+trap '' 0
+
+echo
+echo "$npassed tests passed, $nfailed tests failed"
+exit $nfailed

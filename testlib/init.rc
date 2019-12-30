@@ -1,0 +1,23 @@
+:
+# Test script initialization
+# Set TESTDIR to the directory containing the test scripts, then source this
+# file
+if [ ":$TESTDIR" = ":" ] ; then
+   echo "ERROR: TESTDIR environment variable must be set" >&2
+   exit 1
+fi
+SCRIPTDIR=`dirname "${TESTDIR}"`
+TESTLIBDIR="${SCRIPTDIR}/testlib"
+PATH="${SCRIPTDIR}:${TESTLIBDIR}:${TESTDIR}:${PATH}"
+TMPDIR=/tmp/test-parmdb$$.d
+export TESTDIR TESTLIBDIR SCRIPTDIR PATH TMPDIR
+. testutils.rc
+
+trap "echo Cleaning up... >&2 ; rm -rf ${TMPDIR} ; trap '' 0 ; exit 1" 0 1 2 13 15
+trap "echo Forcing clean-up... >&2 ; rm -rf ${TMPDIR} ; exit 0" 0
+mkdir ${TMPDIR}
+
+echo 0 >$NPASSED
+echo 0 >$NFAILED
+
+

@@ -1,0 +1,16 @@
+#!/bin/sh
+PROG=RUN
+if [ ":$TMPDIR" = ":" ] ; then
+   echo "ERROR: TMPDIR environment variable must be set" >&2
+   exit 1
+fi
+if [ ":$SCRIPTDIR" = ":" ] ; then
+   echo "ERROR: SCRIPTDIR environment variable must be set" >&2
+   exit 1
+fi
+
+. testutils.rc
+
+echo "$@" >$COMMAND
+"$@" >$OUT 2>$ERR
+echo $? >$RETVAL

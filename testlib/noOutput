@@ -1,0 +1,25 @@
+#!/bin/sh
+PROG="noOutput"
+DESC="Check if \$OUT file is empty"
+USAGE1="$PROG [--error]"
+
+if [ ":$TMPDIR" = ":" ] ; then
+   echo "ERROR: TMPDIR environment variable must be set" >&2
+   exit 1
+fi
+. testutils.rc || exit 1
+
+INFILE="${OUT}"
+OUTTYPE=
+
+case $1 in
+    --error)
+        INFILE="${ERR}"
+        OUTTYPE="error " ;;
+esac
+
+if [ -s "${INFILE}" ] ; then
+    report-message "Expected ${OUTTYPE}output to be empty, contains:" <${INFILE}
+    exit 1
+fi
+exit 0

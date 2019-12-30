@@ -1,0 +1,24 @@
+#!/bin/sh
+#
+# Define a new unit test
+#
+if [ ":$TMPDIR" = ":" ] ; then
+   echo "ERROR: TMPDIR environment variable must be set" >&2
+   exit 1
+fi
+if [ ":$SCRIPTDIR" = ":" ] ; then
+   echo "ERROR: SCRIPTDIR environment variable must be set" >&2
+   exit 1
+fi
+
+. testutils.rc
+
+echo "$*:                                                                        " | sed 's/^\(........................................................................\).*/\1/' | tr -d '\n' >${TESTNAME}
+
+:>${COMMAND}
+:>${RETVAL}
+:>${OUT}
+:>${ERR}
+:>${REPORT}
+
+

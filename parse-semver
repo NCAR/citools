@@ -2,47 +2,52 @@
 PROG="parse-semver"
 DESC="Parse semantic version strings"
 USAGE1="${PROG} [-i] [-n] [-p] [-m] [-v] version_str"
+USAGE2="${PROG} -h|--help"
 
-HELP_DESC="
-This script parses a given supposed semantic version string and writes
-one or more of the components to standard output. If the input string is
-not a valid semantic version string, nothing is written and 1 is returned.
-If it is a valid semantic version string, 0 is returned.
+HELP_TEXT="
+        This script parses a given supposed semantic version string and writes
+        one or more of the components to standard output. If the input string
+        is not a valid semantic version string, nothing is written and 1 is
+        returned. If it is a valid semantic version string, 0 is returned.
 
-Note that a leading \"v\" or \"V\" in the input string is allowed, but
-ignored.
-"
-HELP_OPTS="
--i
-    Print the input string (if it is valid).
+        Note that a leading \"v\" or \"V\" in the input string is allowed, but
+        ignored.
 
--n
-    Print the numeric component (major.minor.patch).
+        The following options are supported:
 
--p
-    Print the prerelease component, with its leading \"-\".
+        -i
+            Print the input string (if it is valid).
 
--m
-    Print the metadata component, with its leading \"+\".
+        -n
+            Print the numeric component (major.minor.patch).
 
--v
-    Print major.minor.patch, major.minor, and major as separate string.
+        -p
+            Print the prerelease component, with its leading \"-\".
 
-When more than one of the -n, -p, -m options are given, the components
-are printed consecutively with no intervening spaces. For example,
-\"-np\" would cause \"1.0.0-beta+build2\" to be transformed to
-\"1.0.0-beta\".
+        -m
+           Print the metadata component, with its leading \"+\".
 
-If -i is given along with -n, -p, or -m, its value is always written
-before the other components and separated from them by a space.
+        -v
+            Print major.minor.patch, major.minor, and major as separate string.
 
-If -v is given along with -n, -p, or -m, its value is always written
-after the other components and separated from them by a space.
+        -h|--help
+            Print help text and quit.
+
+        When more than one of the -n, -p, -m options are given, the components
+        are printed consecutively with no intervening spaces. For example,
+        \"-np\" would cause \"1.0.0-beta+build2\" to be transformed to
+        \"1.0.0-beta\".
+
+        If -i is given along with -n, -p, or -m, its value is always written
+        before the other components and separated from them by a space.
+
+        If -v is given along with -n, -p, or -m, its value is always written
+        after the other components and separated from them by a space.
 "
 
 SCRIPTDIR=`cd \`dirname $0\`; pwd`
-. ${SCRIPTDIR}/citools-basics.rc || exit 1
 
+HELP=n
 NUMERIC=n
 PRERELEASE=n
 METADATA=n
@@ -54,11 +59,15 @@ while [ $# != 0 ] ; do
     arg="$1"
     shift
     case $arg in
+      --help)
+          HELP=y ;;
       -??*)
           narg=`expr "$arg" : '\(-.\).*'`
           rest=`expr "$arg" : '-.\(.*\)'`
           set : "${narg}" "-${rest}" "$@"
           shift ;;
+      -h)
+            HELP=y ;;
       -i)
         INVAL=y ;;
       -n)
@@ -76,6 +85,19 @@ while [ $# != 0 ] ; do
         SEMVER="${arg}"
     esac
 done
+if [ $HELP = y ] ; then
+    cat <<EOF
+NAME
+        $PROG - $DESC
+
+SYNOPSIS
+        $USAGE1
+        $USAGE2
+
+DESCRIPTION$HELP_TEXT
+EOF
+        exit 0
+fi
 
 if [ ":$SEMVER" = ":" ] ; then
     echo "${PROG}: version string argument is required" >&2
@@ -100,7 +122,7 @@ if [ $PRERELEASE = y ] ; then
     OUTVAL=${OUTVAL}`expr "${SEMVER}" : '[^-]*\(-[^+]*\).*'`
 fi
 if [ $METADATA = y ] ; then
-    OUTVAL=${OUTVAL}`expr "${SEMVER}" : '[^+]*\(\+.*\)'`
+    OUTVAL=${OUTVAL}`expr "${SEMVER}" : '[^+]*\([+].*\)'`
 fi
 set :
 if [ $INVAL = y ] ; then

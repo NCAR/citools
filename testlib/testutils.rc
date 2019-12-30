@@ -1,0 +1,14 @@
+:
+if [ ":$TMPDIR" = ":" ] ; then
+   echo "ERROR: TMPDIR environment variable must be set" >&2
+   exit 1
+fi
+TESTNAME="${TMPDIR}/testname"
+NPASSED="${TMPDIR}/npassed"
+NFAILED="${TMPDIR}/nfailed"
+COMMAND="${TMPDIR}/command"
+RETVAL="${TMPDIR}/retval"
+OUT="${TMPDIR}/out"
+ERR="${TMPDIR}/err"
+REPORT="${TMPDIR}/report"
+TMPFILE="${TMPDIR}/tmpfile"

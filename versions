@@ -4,163 +4,232 @@ DESC="Version strings lister"
 USAGE1="${PROG} -l|--list"
 USAGE2="${PROG} -c|--current [-n|--no-metadata]"
 USAGE3="${PROG} -i|--inc [-f|--field=N|patch|minor|major]"
+USAGE4="${PROG} -h|--help"
 
-HELP_DESC="
-This script is used to evaluate and manipulate multi-part version strings.
-It reads version strings from standard input, one per line. A typical
-use case is expected to involve piping the output of \"git tag --list\" to
-the script.
+HELP_TEXT="
+        This script is used to evaluate and manipulate multi-part version
+        strings. It reads version strings from standard input, one per line.
+        A typical use case is expected to involve piping the output of \"git
+        tag --list\" to the script.
 
-An input version string may optionally start with \"v\" or \"V\", which is
-ignored.
+        An input version string may optionally start with \"v\" or \"V\",
+        which is ignored.
 
-Following the optional \"v\" or \"V\", the version string is assumed to
-consist of one or more dot-separated purely numeric components,
-followed by an optional \"pre-release version\" string, followed by an
-optional \"metadata\" string. Any input strings that do not conform to this
-format are silently ignored.
+        Following the optional \"v\" or \"V\", the version string is assumed to
+        consist of one or more dot-separated purely numeric components,
+        followed by an optional \"pre-release version\" string, followed by an
+        optional \"metadata\" string. Any input strings that do not conform to
+        this format are silently ignored.
 
-The leading numeric components represent a major version followed by
-progressively more minor versions.
+        The leading numeric components represent a major version followed by
+        progressively more minor versions.
 
-The pre-release string, if present, starts with either the first
-non-numeric dot-separated component, the first non-numeric substring in a
-component that starts with digits, or the component following the first
-hyphen, whichever comes first. The pre-release string must consist of
-dot-separted components that contain only ASCII alphanumerics and hyphens.
+        The pre-release string, if present, starts with either the first
+        non-numeric dot-separated component, the first non-numeric substring
+        in a component that starts with digits, or the component following the
+        first hyphen, whichever comes first. The pre-release string must
+        consist of dot-separted components that contain only ASCII
+        alphanumerics and hyphens.
 
-The metadata component, if present, must be separated from the
-preceeding components by a '+' character. This script does not place any
-restrictions on the content of the metadata component.
+        The metadata component, if present, must be separated from the
+        preceeding components by a '+' character. This script does not place
+        any restrictions on the content of the metadata component.
 
-Note that \"semantic version\" strings are consistent with this scheme,
-with the following additional restrictions: there is no leading \"v\" or \"V\";
-there are exactly three leading numeric components; the pre-release string
-always uses a leading hyphen separator; and the metadata component can
-consist only of dot-separted components that contain only ASCII
-alphanumerics and hyphens.
+        Note that \"semantic version\" strings are consistent with this scheme,
+        with the following additional restrictions: there is no leading \"v\"
+        or \"V\"; there are exactly three leading numeric components; the
+        pre-release string always uses a leading hyphen separator; and the
+        metadata component can consist only of dot-separted components that
+        contain only ASCII alphanumerics and hyphens.
 
-Output consists of a set of \"normalized\" version strings written to
-standard output. These have the following format:
+        Output consists of a set of \"normalized\" version strings written to
+        standard output. These have the following format:
 
-    [v|V]<numvers>[-<prerelease>][+<metadata>]
+          [v|V]<numvers>[-<prerelease>][+<metadata>]
 
-where [] indicates optional parts, <numvers> is a set of one or more dot-
-separated numeric components, and <prerelease> and <metadata> are
-pre-release and metadata strings as previously described. A leading \"v\" or
-\"V\" will be preserved.
-"
-HELP_OPTS="
--c|--current
-    Find the current (latest) version string in the input. No more than
-    one version string will be output.
+        where [] indicates optional parts, <numvers> is a set of one or more
+        dot- separated numeric components, and <prerelease> and <metadata> are
+        pre-release and metadata strings as previously described. A leading
+        \"v\" or \"V\" will be preserved.
 
--f|--field=N|major|minor|patch
-    When used with -i|--inc, indicates which component of the version
-    string should be incremented. The value can be a zero-based integer
-    index of one of the predefined strings \"major\" (=0), \"minor\" (=1), or
-    \"patch\") (=2).
+        The following options are supported:
+
+        -c|--current
+            Find the current (latest) version string in the input. No more than
+            one version string will be output.
+
+        -f|--field=N|major|minor|patch
+            When used with -i|--inc, indicates which component of the version
+            string should be incremented. The value can be a zero-based integer
+            index of one of the predefined strings \"major\" (=0), \"minor\"
+            (=1), or \"patch\") (=2).
         
--i|--inc
-    Find the latest version string in the input and increment either the
-    last leading numeric component, or the numeric component indicated by
-    the -f|--field argument. Following numeric fields are all set to 0, and
-    the prerelease and metadata fields will be empty. Exactly one version
-    string will be output; if no valid versions strings are read from
-    input, the \"current\" version is assumed to be \"0.0.0\".
+        -i|--inc
+            Find the latest version string in the input and increment either
+            the last numeric component, or the numeric component
+            indicated by the -f|--field argument. Following numeric fields are
+            all set to 0, and the prerelease and metadata fields will be
+            empty. Exactly one version string will be output; if no valid
+            versions strings are read from input, the \"current\" version is
+            assumed to be \"0.0.0\".
 
--l|--list
-    Validate the input version strings and sort them all from low to high.
-    The last string output will be the latest version string.
+        -l|--list
+            Validate the input version strings and sort them all from low to
+            high. The last string output will be the latest version string.
 
--n|--no-metadata
-    When used with -c|--current, do not include the metadata part of the
-    version string. Note that if the version string is a valid \"semantic
-    version\" string; this will make the string compatible with docker tags.
-"
+        -n|--no-metadata
+            When used with -c|--current, do not include the metadata part of
+            the version string. Note that if the version string is a valid
+            \"semantic version\" string; this will make the string compatible
+            with docker tags."
 SCRIPTDIR=`cd \`dirname $0\`; pwd`
-. ${SCRIPTDIR}/citools-basics.rc || exit 1
 
-PROGDIR=`dirname "$0"`
-if ":${AWK}" = ":" ; then
+#
+# Process command line
+#
+MODE=
+while [ $# != 0 ] ; do
+    opt=
+    optarg=
+    arg="$1"
+    shift;
+    case $arg in
+        -[cilnh]?*)
+            opt=`expr "$arg" : '-\(.\).*'`
+            optarg=1
+            otheropts=`expr "$arg" : '-.\(.*\)'`
+            set : -${otheropts} "$@"
+            shift ;;
+        -[cilnh])
+            opt=`expr "$arg" : '-\(.\)'`
+            opt=`expr "$arg" : '-\(.\)'`
+            optarg=1 ;;
+        -f=*)
+            opt=`expr "$arg" : '-\(.\)=.*'`
+            optarg=`expr "$arg" : '-.=\(.*\)'` ;;
+        -f?*)
+            opt=`expr "$arg" : '-\(.\).*'`
+            optarg=`expr "$arg" : '-.\(.*\)'` ;;
+        -f)
+            opt=`expr "$arg" : '-\(.\)'`
+            optarg="$1"
+            shift ;;
+        --*=*)
+            longopt=`expr "$arg" : '--\([^=]*\)=.*'`
+            opt=`expr "$arg" : '--\([a-z]\)[-a-z]*=.*'`
+            optarg=`expr "$arg" : '[^=]*=\(.*\)'` ;;
+        --*)
+            longopt=`expr "$arg" : '--\(.*\)'`
+            opt=`expr "$arg=" : '--\([a-z]\)[-a-z]*=.*'`
+            optarg=1
+            if [ "$opt" = "l" ] ; then
+                optarg="values"
+            fi ;;
+        *)
+            set "${arg}" "$@"
+            break ;;
+    esac
+    case $longopt in
+        '')
+            : ;;
+        current|field|inc|list|no-metadata|help)
+            : ;;
+        *)
+            echo "$PROG: unknown option: --$longopt" >&2
+            exit 1
+    esac
+    eval ${opt}_opt="'${optarg}'"
+    case $opt in
+        [cilh])
+            MODE=${opt}$MODE ;;
+        [nf])
+            : ;;
+        -*)
+            echo "$PROG: illegal option: $opt" >&2
+            usage >&2
+            return 1 ;;
+    esac
+done
+case $MODE in
+    h)
+        cat <<EOF
+NAME
+        $PROG - $DESC
+
+SYNOPSIS
+        $USAGE1
+        $USAGE2
+        $USAGE3
+        $USAGE4
+
+DESCRIPTION$HELP_TEXT
+EOF
+        exit 0 ;;
+    '')
+        cat <<EOF >&2
+$PROG: one of -c|--current, -i|--inc, -l|--list, or -h|--help is required
+$USAGE
+EOF
+        exit 1 ;;
+    ?)  : ;;
+    *)
+        cat <<EOF >&2
+$PROG: only one of -c|--current, -i|--inc, -l|--list, or -h|--help is allowed
+$USAGE
+EOF
+        exit 1 ;;
+esac
+
+if [ $MODE = i ] ; then
+    case $f_opt in
+        '')
+            : ;;
+        [012])
+            : ;;
+        major|majo|maj|ma)
+            f_opt=0 ;;
+        minor|mino|min|mi)
+            f_opt=1 ;;
+        patch|patc|pat|pa|p)
+            f_opt=2 ;;
+        *)
+            echo "$PROG: -f|--field value must be one of:
+         \"0\", \"1\", \"2\", \"major\", \"minor\", or \"patch\"" >&2
+            exit 1 ;;
+    esac
+else
+    if [ ":$f_opt" != ":" ] ; then
+        echo "$PROG: -f|--field is only valid with -i|--inc" >&2
+        exit 1
+    fi
+fi
+
+
+#
+# Now do the real work
+
+if [ $MODE = i ] ; then
+    FAILSAFE_VERSION=0.0.0
+else
+    FAILSAFE_VERSION=
+fi
+
+FILTER='^[vV]?[0-9][^:]*$'
+
+if [ ":${AWK}" = ":" ] ; then
     for AWK in awk nawk gawk false ; do
         ${AWK} 'BEGIN{exit 0}' 2>/dev/null && break
     done
     if test "${AWK}" = "false" ; then
         echo "${PROG}: cannot find awk!" >&2
-        exit 1
+        AWK=awk
     fi
 fi
 
-MODEARGS=
-MODE=
-FIELD=
-META=y
-FAILSAFE_VERSION=
-
-# Process command line
-while test $# -gt 0 ; do
-    arg="$1"
-    shift
-    multi=`expr "X${arg}" : 'X\(-[a-z]\)..*'`
-    if test ":${multi}" != ":" ; then
-        newarg=`expr "X${arg}" : 'X-[a-z]\(..*\)'`
-        arg="${multi}"
-        case ${arg} in
-            -f) set : "${newarg}" "$@" ;;
-            *)  set : "-${newarg}" "$@" ;;
-        esac
-        shift
-    fi
-    case ${arg} in
-    -c|--current)
-        MODEARGS="${MODEARGS} ${arg}"
-        MODE="${MODE}current" ;;
-    -f)
-        FIELD="$1"
-        shift ;;
-    --field=*)
-        FIELD=`expr "X${arg}" : 'X--field=\(.*\)'` ;;
-    -i|--inc)
-        MODEARGS="${MODEARGS} ${arg}"
-        MODE="${MODE}inc"
-        FAILSAFE_VERSION=0.0.0 ;;
-    -l|--list)
-        MODEARGS="${MODEARGS} ${arg}"
-        MODE="${MODE}list" ;;
-    -n|--no-metadata)
-        META=n ;;
-    *)
-        echo "${PROG}: unrecognized argument: ${arg}" >&2
-        echo "${USAGE}" >&2
-        exit 1 ;;
-    esac
-done
-case ${MODE} in
-    '')
-        echo "${PROG} ${VERSION} - ${DESC}"
-        echo "$USAGE"
-        exit 0 ;;
-    list|current|inc)
-        : ;;
-    *)
-        echo "${PROG}: The following are mutually exclusive: ${MODEARGS}" >&2
-        echo "$USAGE" >&2
-        exit 1 ;;
-esac
-case ${FIELD} in
-    '')    : ;;
-    major) FIELD=0 ;;
-    minor) FIELD=1 ;;
-    patch) FIELD=2 ;;
-    [0-9]) : ;;
-    *)
-        echo "${PROG}: -f|--field: Invalid field identiier: $FIELD" >&2
-        exit 1 ;;
-esac
-
-FILTER='^[vV]?[0-9][^:]*$'
-
+#
+# The AWK script filters out non-versions strings and normalizes version
+# formats
+#
 rc=0
 (echo ${FAILSAFE_VERSION} ; cat) | egrep "$FILTER" | ${AWK} '
 BEGIN {
@@ -280,16 +349,16 @@ END {
     printf "END\n"
 }
 ' | sort | while read status data ; do
-    if test ":$status" = ":END" ; then
+    if [ ":$status" = ":END" ] ; then
         case ${MODE} in
-            current)
-                if test $META = y ; then
+            c)  # --current
+                if [ ":$n_opt" != ":1" ] ; then
                     echo "${last}"
                 else
                     nmvers=`echo "${last}" | sed -e 's/^\([vV]*[^+]*\)+.*/\1/'`
                     echo "${nmvers}"
                 fi ;;
-            inc)
+            i)  # --inc
                 prefix=`echo "${last}" | sed -e 's/^\([vV]*\)[0-9].*/\1/'`
                 nv=`echo "${last}" | sed -e 's/^[vV]*\([0-9][.0-9]*\).*/\1/'`
                 numvers=`echo "${nv}" | awk -F "." '
@@ -315,11 +384,11 @@ END {
                     l = length(out)
                     print substr(out,1,l-1)
                 }
-                ' field="${FIELD}"`
+                ' field="${f_opt}"`
                 echo "${prefix}${numvers}" ;;
         esac
     else
-        if test ":${MODE}" = ":list" ; then
+        if [ ":${MODE}" = ":l" ] ; then
             echo "${data}"
         else
             last="${data}"

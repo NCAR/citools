@@ -1,9 +1,10 @@
 #!/bin/sh
-PROG="sw-manifest"
-DESC="Print a list of installed software on a linux host"
-USAGE1="${PROG} [from-base]"
+PROG="buildinfo"
+DESC="Collect container build information"
+USAGE1="${PROG}"
 USAGE2="${PROG} -h|--help"
-BASE=
+BUILDINFO=/etc/buildinfo
+SCRIPTDIR=`cd \`dirname $0\`; pwd`
 
 case $1 in
     -h|--help)
@@ -15,11 +16,22 @@ SYNOPSIS
     $USAGE
 
 DESCRIPTION
-    Print a list of installed software on a linux host, including the output
+    Print a list of \"official\" installed software, including the output
     of \"uname -mvr\", the distro version, and all packages reported by the
     package manager.
 
-    The name of the base image should be passed in as a command-line argument.
+    This is best run from a Dockerfile after all software has been installed
+    for an image.
+
+FILES
+    ${BUILDINFO}/kernel_release
+    ${BUILDINFO}/kernel_version
+    ${BUILDINFO}/machine
+    ${BUILDINFO}/distro
+    ${BUILDINFO}/distro_release
+    ${BUILDINFO}/package_manager
+    ${BUILDINFO}/packages
+        Information is stored in these files. Names are self-explanatory.
 EOF
         exit 0 ;;
     -*)
@@ -31,18 +43,21 @@ EOF
     *)
         BASE="$1" ;;
 esac
-grep '.*:/docker/.*' /proc/1/cgroup >/dev/null 2>&1
-if [ $? != 0 ] ; then
+container_id=`sed -n -e '2,$d' -e 's/.*:.docker.\(.*\)/\1/p' /proc/self/cgroup 2>/dev/null`
+if [ ":$container_id" = ":" ] ; then
     echo "$PROG: Must be run in a docker container" >&2
     exit 1
 fi
 
-cd /etc/ || exit 1
+if [ ! -d ${BUILDINFO} ] ; then
+    mkdir ${BUILDINFO} || exit 1
+fi
 
-kernelrel=`uname -r`
-kernelvers=`uname -v`
-machine=`uname -m`
+uname -r >${BUILDINFO}/kernel_release
+uname -v >${BUILDINFO}/kernel_version
+uname -m >${BUILDINFO}/machine
 
+cd /etc || exit 1
 KNOWN_RELEASEFILES="
   alpine-release
   centos-release
@@ -53,10 +68,18 @@ KNOWN_RELEASEFILES="
 
 RELEASE_FILE=
 RELEASE=
+DISTRO=
+if [ -f /etc/os-release ] ; then
+    . /etc/os-release
+    DISTRO="${NAME}"
+fi
 for releasefile in ${KNOWN_RELEASEFILES} ; do
     if [ -f ${releasefile} ] ; then
         read RELEASE <${releasefile}
         RELEASE_FILE=${releasefile}
+        if [ ":$DISTRO" = ":" ] ; then
+            DISTRO=`echo $RELEASE_FILE | sed -n 's/^\([a-zA-Z0-9]*\).*/\1/p'`
+        fi
         break
     fi
 done
@@ -64,17 +87,14 @@ if [ ":$RELEASE" = ":" ] ; then
     echo "$PROG: Cannot determine linux distribution type!" >&2
     exit 1
 fi
+echo $DISTRO >${BUILDINFO}/distro
+echo $RELEASE >${BUILDINFO}/distro_release
 
-if [ ":$BASE" != ":" ] ; then
-    echo "FROM: $BASE"
-fi
-
-echo "KERNEL_RELEASE $kernelrel"
-echo "KERNEL_VERSION $kernelvers"
-echo "MACHINE $machine"
+exec >${BUILDINFO}/packages
 
 case $RELEASE_FILE in
     alpine-release)
+        echo "apk" >${BUILD_INFO}/package_manager
         apk info -vv 2>&1 | sed -e 's/ - .*//' | sort | \
             grep -v 'WARNING: ' | while read pkgvers ; do
                 pkg=`echo "$pkgvers" | sed 's/-[0-9].*//'`
@@ -83,6 +103,7 @@ case $RELEASE_FILE in
             done ;;
         
     centos-release|fedora-release|oracle-release)
+        echo "rpm" >${BUILD_INFO}/package_manager
         rpm -qa | sort | sed "s/^/$cmd: /" | while read rpm pkgvers ; do
             pkg=`echo "$pkgvers" | sed 's/-[0-9].*//'`
             vers=`echo "$pkgvers" | sed "s/^${pkg}-\([0-9].*\)/\1/"`
@@ -90,6 +111,7 @@ case $RELEASE_FILE in
         done ;;
 
     debian_version)
+        echo "dpkg" >${BUILD_INFO}/package_manager
         dpkg-query -W | tr '\t' ' ' ;;
 
 esac

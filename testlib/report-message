@@ -1,0 +1,17 @@
+#!/bin/sh
+PROG=report-message
+if [ ":$TMPDIR" = ":" ] ; then
+   echo "ERROR: TMPDIR environment variable must be set" >&2
+   exit 1
+fi
+if [ ":$SCRIPTDIR" = ":" ] ; then
+   echo "ERROR: SCRIPTDIR environment variable must be set" >&2
+   exit 1
+fi
+
+. testutils.rc
+
+title="$1"
+shift
+echo "  ${title}" >>${REPORT}
+sed 's/^/    /' >>${REPORT}

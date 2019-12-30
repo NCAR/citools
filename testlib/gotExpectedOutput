@@ -1,0 +1,81 @@
+#!/bin/sh
+PROG="gotExpectedOutput"
+DESC="Check if \$OUT file contains given string"
+USAGE1="$PROG [--contains] [--error|--retval] string"
+USAGE2="$PROG --exact [--error|--retval] string"
+USAGE3="$PROG --regex [--error|--retval] regex"
+
+if [ ":$TMPDIR" = ":" ] ; then
+   echo "ERROR: TMPDIR environment variable must be set" >&2
+   exit 1
+fi
+. testutils.rc || exit 1
+
+INFILE="${OUT}"
+OUTTYPE="output"
+TYPE=contain
+while : ; do
+    case $1 in
+        --contains)
+            TYPE=contain ;;
+        --exact)
+            TYPE=equal ;;
+        --regex)
+            TYPE=match ;;
+        --error)
+            INFILE="${ERR}"
+            OUTTYPE="error output" ;;
+        --retval)
+            INFILE="${RETVAL}"
+            OUTTYPE="return value" ;;
+        --)
+            ARG="$2"
+            break ;;
+        -*)
+            echo "$PROG: invalid option: $1" >&2
+            exit 1 ;;
+        *)
+            ARG="$1"
+            break ;;
+    esac
+    shift 
+done
+
+LC_CTYPE=C
+LANG=C
+export LC_CTYPE LANG
+
+rc=0
+case $TYPE in
+     contain)
+         # embedded newlines cause portability problems
+         od -t x1 <${INFILE} | 
+           sed -e 's/^.......//' -e 's/  */ /g' |
+           tr -d '\n' >${TMPDIR}/geo_INFILE_x
+         echo >>${TMPDIR}/geo_INFILE_x
+         ARG_X=`echo-n "${ARG}" | 
+                od -t x1 | 
+                sed -e 's/^.......//' -e 's/  */ /g' |
+                tr -d '\n'`
+         fgrep -e "${ARG_X}" <${TMPDIR}/geo_INFILE_x >/dev/null 2>&1
+         rc=$? ;;
+
+     equal)
+         filecontents=`cat ${INFILE}`
+         if [ ":${filecontents}" != ":${ARG}" ] ; then
+             rc=1
+         fi ;;
+
+     match)
+         grep -e "${ARG}" <${INFILE} >/dev/null 2>&1
+         rc=$? ;;
+esac
+
+if [ $rc != 0 ] ; then
+    echo "$ARG" | report-message "Expected ${OUTTYPE} to $TYPE:"
+    report-message "Got:" <$INFILE
+    read -r retval <$RETVAL
+    echo "  Command returned $retval" >>$REPORT
+    echo >>$REPORT
+fi
+exit $rc

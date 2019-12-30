@@ -2,47 +2,73 @@
 PROG=get-git-version
 DESC="If in a git repo, show its best semantic version number"
 USAGE1="${PROG} [-v|--verbose] [--ignore-untracked]"
+USAGE2="${PROG} -h|--help"
 
-HELP_DESC="
-If run in a git repository, this determines the best semantic version
-number for the current state.
+HELP_TEXT="
+        If run in a git repository, this determines the best semantic version
+        number for the current state.
 
-If the repo is up-to-date and there is a semantic version tag associated
-with the current release, that version tag is selected. Otherwise, a
-semantic version string will be contructed; it will have the form
-  <major>.<minor>.<patch>-<timestamp>.<revision>
-where <major>.<minor>.<patch> is the most recent semver git tag with the
-patch number incremented by one, <timestamp> is a compact UTC timestamp,
-and <revision> is the abreviated git revision hash. If the is no git tag
-that is a valid semver string, <major>.<minor>.<patch> will be "0.0.1".
-If the repo contains any uncommitted/untracked files, \".snapshot\" is
-appended.
+        If the repo is up-to-date and there is a semantic version tag
+        associated with the current release, that version tag is selected.
+        Otherwise, a semantic version string will be contructed; it will have
+        the form
+          <major>.<minor>.<patch>-<timestamp>.<revision>
+        where <major>.<minor>.<patch> is the most recent semver git tag with
+        the patch number incremented by one, <timestamp> is a compact UTC
+        timestamp, and <revision> is the abreviated git revision hash. If the
+        is no git tag that is a valid semver string, <major>.<minor>.<patch>
+        will be "0.0.1". If the repo contains any uncommitted/untracked files,
+        \".snapshot\" is appended.
 
-The script will write the version tag to standard output. 
-"
-HELP_OPTS="
--v|--verbose
-    Write information messages to stderr.
+        The script will write the version tag to standard output. 
 
---ignore-untracked
-    Untracked files are ignored when determining whether the repo is
-    up-to-date.
+        The following options are supported:
+
+          --ignore-untracked
+            Untracked files are ignored when determining whether the repo is
+            up-to-date.
 "
 SCRIPTDIR=`cd \`dirname $0\`; pwd`
-. ${SCRIPTDIR}/citools-basics.rc || exit 1
-
+VERSIONS=${SCRIPTDIR}/versions
+PARSE_SEMVER=${SCRIPTDIR}/parse-semver
+VECHO=:
 UNO=
-while test $# != 0 ; do
-    case $1 in
+
+while [ $# != 0 ] ; do
+    arg="$1"
+    shift
+    case $arg in
+        -h|--help)
+            cat <<EOF
+NAME
+        $PROG - $DESC
+
+SYNOPSIS
+        $USAGE1
+        $USAGE2
+
+DESCRIPTION$HELP_TEXT
+EOF
+            exit 1 ;;
+
         -v|--verbose)
-            CITOOLS_VERBOSE=true export CITOOLS_VERBOSE ;;
+            VECHO=echo ;;
+
         --ignore-untracked)
             UNO=-uno ;;
+
+        -*)
+            cat >&2 <<EOF
+$PROG: invalid option: $arg
+Usage:
+  $USAGE1
+  $USAGE2
+EOF
+            exit 1 ;;
     esac
-    shift
 done
 
-if test ! -x ${SCRIPTDIR}/versions ; then
+if test ! -x ${VERSIONS} ; then
     echo "$PROG: cannot find versions script" >&2
     exit 1
 fi
@@ -51,7 +77,7 @@ cd ${REPO_ROOT} || exit 1
 
 COMMIT=`git rev-list HEAD 2>/dev/null | head -1`
 
-vecho "Commit SHA1: $COMMIT"
+$VECHO "Commit SHA1: $COMMIT"
 
 uncomm=`git status ${UNO} -s`
 
@@ -59,27 +85,27 @@ prerelease=
 release_id=
 suffix=
 if test ":$uncomm" != ":" ; then
-    vecho "There are uncommitted changes to this repo:"
-    vecho "$uncomm"
+    $VECHO "There are uncommitted changes to this repo:"
+    $VECHO "$uncomm"
     suffix=".snapshot"
 else
-    currver=`git tag --list --points-at "${COMMIT}" | ${SCRIPTDIR}/versions -c`
+    currver=`git tag --list --points-at "${COMMIT}" | ${VERSIONS} -c`
     if test ":${currver}" != ":" ; then
-        vecho "Current commit has a semantic version tag: ${currver}"
+        $VECHO "Current commit has a semantic version tag: ${currver}"
         echo "${currver}"
         exit 0
     fi
 fi
-vecho "Current commit does not have a semantic version tag"
+$VECHO "Current commit does not have a semantic version tag"
 timestamp=`date -u +%Y%m%dT%H%M%SZ`
 release_id=`expr "${COMMIT}" : '\(.......\).*'`
-basever=`git tag --list --no-contains "${COMMIT}" | ${SCRIPTDIR}/versions -c`
+basever=`git tag --list --no-contains "${COMMIT}" | ${VERSIONS} -c`
 if test ":${basever}" = ":" ; then
     version="0.0.1"
-    vecho "No semantic version tags found - using ${version}"
+    $VECHO "No semantic version tags found - using ${version}"
 else
-    vecho "Found base semantic version tag; incrementing ${basever}"
-    version=`parse-semver -n ${basever} | versions -i`
+    $VECHO "Found base semantic version tag; incrementing ${basever}"
+    version=`${PARSE_SEMVER} -n ${basever} | ${VERSIONS} -i`
 fi
 echo "${version}-${timestamp}.${release_id}${suffix}"
 exit 0

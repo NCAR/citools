@@ -1,0 +1,25 @@
+#!/bin/sh
+PROG="fileEquals"
+DESC="Check if two files contain exactly the same data"
+USAGE1="$PROG file1 file2"
+
+if [ ":$TMPDIR" = ":" ] ; then
+   echo "ERROR: TMPDIR environment variable must be set" >&2
+   exit 1
+fi
+. testutils.rc || exit 1
+
+if [ $# != 2 ] ; then
+   echo "ERROR: expecting two file arguments" >&2
+   exit 1
+fi
+TMPFILE_FE=${TMPDIR}/fileEquals$$
+
+cmp "$1" "$2" >${TMPFILE_FE} 2>&1
+if [ -s ${TMPFILE_FE} ] ; then
+    report-message "Expected $1 and $2 to match, cmp returned:" <${TMPFILE_FE}
+    rm -f ${TMPFILE_FE}
+    exit 1
+fi
+rm -f ${TMPFILE_FE}
+exit 0
