@@ -18,7 +18,7 @@ HELP_OPTS="
     If given, the top-level directory containing the scripts to document.
     If not given, the top-level directory in the repo is used. If a
     relative path is provided, it is assumed to relative to the top-level
-    directiry in the repo.
+    directory in the repo.
 "
 HELP_ARGS="
 docdir
