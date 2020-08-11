@@ -12,6 +12,9 @@ option, and a markdown index file with links to the text documents.
 
 Other repos that use the same scripting conventions as citools can use
 this script as well.
+
+To help identify script files, $PROG assumes that all supported scripts
+contain a line starting with \"PROG=\" or \"\$PROG =\".
 "
 HELP_OPTS="
 --bindir=dir
@@ -76,7 +79,7 @@ cd "${BINDIR}" || exit 1
 
 trap "rm -rf ${TMPFILE} ${INDEXFILE}.tmp ; exit 1" 0 1 2 13 15
 
-find . -type f ! -name '*~' -perm -0005 -exec grep -l '^PROG=' {} \; \
+find . -type f ! -name '*~' -perm -0005 -exec egrep -l '^[$]?PROG *=' {} \; \
 | while read file ; do
     relpath=`expr "${file}" : '\./\(.*\)$'`
     base=`basename "${relpath}"`
