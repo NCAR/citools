@@ -11,13 +11,14 @@ creates man-like text documents by invoking each script with its --help
 option, and a markdown index file with links to the text documents.
 
 Other repos that use the same scripting conventions as citools can use
-this script as well. For acceptable results, the --help option should output
-plain text in man-page-like form. In particular, the first line of --help
-should start with \"NAME\", and the second line should be of the form
+this script as well. For acceptable results, the --help option should
+output plain text in man-page-like form. In particular, the first line
+of --help should start with \"NAME\", and the second line should be of
+the form
   <progname> - <description>
 
-Repos that use CircleCI to automate builds can add the following code to their
-config.yml configuration file:
+Repos that use CircleCI to automate builds can add the following code to
+their config.yml configuration file:
 
       - run:
           name: \"Generate documentation\"
@@ -116,7 +117,6 @@ fi
 for file in $DOCGEN_PROGS ; do
     relpath=`expr "${file}" : '\./\(.*\)$'`
     base=`basename "${relpath}"`
-`
     echo '```text' >${TMPFILE}
     ${file} --help >>${TMPFILE}
     echo '```' >>${TMPFILE}
