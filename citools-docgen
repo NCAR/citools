@@ -11,10 +11,33 @@ creates man-like text documents by invoking each script with its --help
 option, and a markdown index file with links to the text documents.
 
 Other repos that use the same scripting conventions as citools can use
-this script as well.
+this script as well. Specifically, in addition to supporting a --help
+option, a documentable script must contain a line starting with \"PROG=\"
+or \"\$PROG =\".
 
-To help identify script files, $PROG assumes that all supported scripts
-contain a line starting with \"PROG=\" or \"\$PROG =\".
+Repos that use CircleCI to automate builds can add the following code to their
+config.yml configuration file:
+
+      - run:
+          name: "Generate documentation"
+          command: |
+              set +e
+              git config --global user.email "${GH_USER_EMAIL}"
+              git config --global user.name "${GH_USER_NAME}"
+              git clone --depth 1 https://${GH_TOKEN}@github.com/NCAR/citools.git /tmp/citools
+              REPO=$CIRCLE_PROJECT_USERNAME/$CIRCLE_PROJECT_REPONAME
+              export REPO
+              git clone https://${GH_TOKEN}@github.com/$REPO.wiki.git /tmp/wiki
+              /tmp/citools/citools-docgen --bindir=`pwd` /tmp/wiki
+              cd /tmp/wiki
+              git add .
+              if git commit -m 'Latest doc build' ; then
+                  git push
+              fi
+
+The GH_TOKEN, GH_USER_EMAIL, and GH_USER_NAME environment variables are
+typically defined the CircleCI context for the build.
+
 "
 HELP_OPTS="
 --bindir=dir
