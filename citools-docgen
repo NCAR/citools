@@ -113,13 +113,12 @@ fi
 for file in $DOCGEN_PROGS ; do
     relpath=`expr "${file}" : '\./\(.*\)$'`
     base=`basename "${relpath}"`
-    descline=`sed -n -e '/^DESC=/p' ${file}`
-    DESC="?"
-    eval ${descline}
+`
     echo '```text' >${TMPFILE}
     ${file} --help >>${TMPFILE}
     echo '```' >>${TMPFILE}
     if [ -s "${TMPFILE}" ] ; then
+        DESC=`awk 'f{print;f=0} /^NAME/{f=1}' ${TMPFILE} | sed 's/^ *[^ ]* - \(.*\)/\1/'
         dir=`dirname "${DOCDIR}/${file}"`
         mkdir -p "${dir}"
         mv "${TMPFILE}" "${DOCDIR}/${file}.md"
