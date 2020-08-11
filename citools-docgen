@@ -114,11 +114,12 @@ trap "rm -rf ${TMPFILE} ${INDEXFILE}.tmp ; exit 1" 0 1 2 13 15
 if [ ":$DOCGEN_PROGS" = ":" ] ; then
     DOCGEN_PROGS=`find . -type f ! -name '*~' -perm -0005 -exec egrep -l '^[$]?PROG *=' {} \;`
 fi
+
 for file in $DOCGEN_PROGS ; do
     relpath=`expr "${file}" : '\./\(.*\)$'`
     base=`basename "${relpath}"`
     echo '```text' >${TMPFILE}
-    ${file} --help >>${TMPFILE}
+    ${file} --help >>${TMPFILE} 2>/dev/null </dev/null
     echo '```' >>${TMPFILE}
     if grep -q '^NAME' ${TMPFILE} ; then
         DESC=`awk 'f{print;exit 0} /^NAME/{f=1}' ${TMPFILE} | sed 's/^ *[^ ]* - \(.*\)/\1/'`
@@ -133,7 +134,7 @@ cat >${INDEXFILE} <<EOF
 Welcome to the ${REPONAME} wiki!
 
 Many documents in the wiki are generated automatically when a change is
-committed. These documents are simply snapshots of each script's `--help`
+committed. These documents are simply snapshots of each script's \`--help\`
 documentation.
 
 EOF

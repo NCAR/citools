@@ -2,6 +2,9 @@
 PROG="noOutput"
 DESC="Check if \$OUT file is empty"
 USAGE1="$PROG [--error]"
+if [ ":$1" = ":--help" ] ; then
+    exit 0
+fi
 
 if [ ":$TMPDIR" = ":" ] ; then
    echo "ERROR: TMPDIR environment variable must be set" >&2

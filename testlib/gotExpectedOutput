@@ -4,6 +4,9 @@ DESC="Check if \$OUT file contains given string"
 USAGE1="$PROG [--contains] [--error|--retval] string"
 USAGE2="$PROG --exact [--error|--retval] string"
 USAGE3="$PROG --regex [--error|--retval] regex"
+if [ ":$1" = ":--help" ] ; then
+    exit 0
+fi
 
 if [ ":$TMPDIR" = ":" ] ; then
    echo "ERROR: TMPDIR environment variable must be set" >&2

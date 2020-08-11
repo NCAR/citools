@@ -2,6 +2,9 @@
 PROG="fileEquals"
 DESC="Check if two files contain exactly the same data"
 USAGE1="$PROG file1 file2"
+if [ ":$1" = ":--help" ] ; then
+    exit 0
+fi
 
 if [ ":$TMPDIR" = ":" ] ; then
    echo "ERROR: TMPDIR environment variable must be set" >&2

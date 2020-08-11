@@ -2,6 +2,9 @@
 #
 # Define a new unit test
 #
+if [ ":$1" = ":--help" ] ; then
+    exit 0
+fi
 if [ ":$TMPDIR" = ":" ] ; then
    echo "ERROR: TMPDIR environment variable must be set" >&2
    exit 1
