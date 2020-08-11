@@ -42,7 +42,8 @@ typically defined the CircleCI context for the build.
 HELP_OPTS="
 --bindir=dir
     If given, the top-level directory containing the scripts to document.
-    If not given, the top-level directory in the repo is used. If a
+    If not given, the top-level directory in the repo is used if a list of
+    scripts is not provided via the DOCGEN_PROGS environment variable. If a
     relative path is provided, it is assumed to relative to the top-level
     directory in the repo.
 "
@@ -51,6 +52,12 @@ docdir
     The output directory.
 "
 HELP_ENV="
+DOCGEN_PROGS
+    If set, a whitespace-separated list of programs with a --help option
+    that should be used to generate documentation. If not set, scripts
+    under the --bindir directory containing a line starting with \"PROG=\"
+    or \"\$PROG =\" are used.
+
 REPO
     The owner/repo name of the target script repository. Default is
     \"${REPO_DEFAULT}\".
@@ -102,8 +109,10 @@ cd "${BINDIR}" || exit 1
 
 trap "rm -rf ${TMPFILE} ${INDEXFILE}.tmp ; exit 1" 0 1 2 13 15
 
-find . -type f ! -name '*~' -perm -0005 -exec egrep -l '^[$]?PROG *=' {} \; \
-| while read file ; do
+if [ ":$DOCGEN_PROGS" = ":" ] ; then
+    DOCGEN_PROGS=`find . -type f ! -name '*~' -perm -0005 -exec egrep -l '^[$]?PROG *=' {} \;`
+fi
+for file in $DOCGEN_PROGS ; do
     relpath=`expr "${file}" : '\./\(.*\)$'`
     base=`basename "${relpath}"`
     descline=`sed -n -e '/^DESC=/p' ${file}`
