@@ -1,6 +1,33 @@
 #!/bin/sh
 PROG=get-image-tags
-DESC="Retrieve a list of all known tags for a given"
+DESC="Retrieve a list of all known tags for a dockerhub repo"
+USAGE="$PROG repo"
+HELP_TEXT="
+    Use the docker hub API to retrieve all tags for a names repo.
+"
+HELP_ENV="
+    DOCKERHUB_USERNAME
+        The docker hub username (required).
+
+    DOCKERHUB_PASSWORD
+        The docker hub password (required).
+
+"
+case $1 in
+    -h|--help)
+        cat <<EOF
+NAME
+    $PROG - $DESC
+
+SYNOPSIS
+    $USAGE
+
+DESCRIPTION$HELP_TEXT
+ENVIRONMENT$HELP_ENV
+EOF
+        exit 0 ;;
+esac
+
 #set -vx
 REPO="$1"
 if [ ":${REPO}" = ":" ] ; then

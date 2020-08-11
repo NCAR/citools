@@ -8,6 +8,19 @@ helpful when debugging a CircleCI job.
 All environment variables are displayed, but the values of variables that
 look like secure keys are shown as \"----\".
 "
+case $1 in
+    -h|--help)
+        cat <<EOF
+NAME
+    $PROG - $DESC
+
+SYNOPSIS
+    $PROG
+
+DESCRIPTION$HELP_DESC
+EOF
+        exit 0 ;;
+esac
 
 echo "Environment variables:"
 printenv | sed -e 's/^/    /' \

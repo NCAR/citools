@@ -1,21 +1,41 @@
 #!/bin/sh
 PROG=docker-build
 DESC="Run \"docker build\" in two passes to embed metadata"
+USAGE1="$PROG -h|--help"
+USAGE2="$PROG  [OPTIONS] PATH | URL | -"
 HELP_TEXT="
-Usage: ${PROG} [OPTIONS] PATH | URL | -
+    Run \"docker build\" in two passes: the first pass caches the base image
+    and all layers defined by the Dockerfile. Information about the base image
+    is extracted from the built image, and if there is a .git directory,
+    information about the release is gathered. The second pass uses this
+    information to supplement the final image with the following labels:
+      base.digest       - the base image digest
+      base.tag          - the base image tag
+      git.remote.origin - the url of the git remote origin (e.g. git remote
+                          repo)
+      git.commit.sha1   - the sha1 of the latest commit
 
-Run \"docker build\" in two passes: the first pass caches the base image and
-all layers defined by the Dockerfile. Information about the base image is
-extracted from the built image, and if there is a .git directory, information
-about the release is gathered. The second pass uses this information to
-supplement the final image with the following labels:
-  base.digest       - the base image digest
-  base.tag          - the base image tag
-  git.remote.origin - the url of the git remote origin (e.g. git remote repo)
-  git.commit.sha1   - the sha1 of the latest commit
+    The following options are passed to \"docker build\":
 "
 SCRIPTDIR=`cd \`dirname $0\`; pwd`
 PATH="${SCRIPTDIR}:${PATH}" export PATH
+
+case $1 in
+    -h|--help)
+        cat <<EOF
+NAME
+    $PROG - $DESC
+
+SYNOPSIS
+    $USAGE1
+    $USAGE2
+
+DESCRIPTION$HELP_TEXT
+EOF
+        docker build --help | awk 'p{print} /^Options:/{p=1}'
+        exit 0 ;;
+esac
+
 . setup-scratchdir.rc
 
 NEWARGS1="${SCRATCHDIR}/nargs1"

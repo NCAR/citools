@@ -120,8 +120,8 @@ for file in $DOCGEN_PROGS ; do
     echo '```text' >${TMPFILE}
     ${file} --help >>${TMPFILE}
     echo '```' >>${TMPFILE}
-    if [ -s "${TMPFILE}" ] ; then
-        DESC=`awk 'f{print;f=0} /^NAME/{f=1}' ${TMPFILE} | sed 's/^ *[^ ]* - \(.*\)/\1/'`
+    if grep -q '^NAME' ${TMPFILE} ; then
+        DESC=`awk 'f{print;exit 0} /^NAME/{f=1}' ${TMPFILE} | sed 's/^ *[^ ]* - \(.*\)/\1/'`
         dir=`dirname "${DOCDIR}/${file}"`
         mkdir -p "${dir}"
         mv "${TMPFILE}" "${DOCDIR}/${file}.md"
