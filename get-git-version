@@ -10,14 +10,14 @@ HELP_TEXT="
 
         If the repo is up-to-date and there is a semantic version tag
         associated with the current release, that version tag is selected.
-        Otherwise, a semantic version string will be contructed; it will have
+        Otherwise, a semantic version string will be constructed; it will have
         the form
           <major>.<minor>.<patch>-<timestamp>.<revision>
         where <major>.<minor>.<patch> is the most recent semver git tag with
         the patch number incremented by one, <timestamp> is a compact UTC
         timestamp, and <revision> is the abreviated git revision hash. If the
         is no git tag that is a valid semver string, <major>.<minor>.<patch>
-        will be "0.0.1". If the repo contains any uncommitted/untracked files,
+        will be \"0.0.1\". If the repo contains any uncommitted/untracked files,
         \".snapshot\" is appended.
 
         The script will write the version tag to standard output. 

@@ -45,4 +45,4 @@ done
 # get token to be able to talk to Docker Hub
 TOKEN=`curl -s -H "Content-Type: application/json" -X POST -d '{"username": "'${DOCKERHUB_USERNAME}'", "password": "'${DOCKERHUB_PASSWORD}'"}' https://hub.docker.com/v2/users/login/ | jq -r .token`
 
-curl -s -H "Authorization: JWT ${TOKEN}" https://hub.docker.com/v2/repositories/${REPO}/tags/?page_size=100 | jq -r '.results|.[]|.name'
+curl -s -H "Authorization: JWT ${TOKEN}" https://hub.docker.com/v2/repositories/${REPO}/tags/?page_size=100 #| jq -r . '.results|.[]|.name'
